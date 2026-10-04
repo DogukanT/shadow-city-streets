@@ -16,7 +16,7 @@ type Shipment = { id: string; weapon: Weapon; ship: string; from: string; to: st
 type Member = { id: string; name: string; role: string; img: string; weaponUid: string | null; power: number };
 type Screen = "intro" | "city" | "hq" | "market" | "listing" | "escrow" | "port" | "war" | "crew" | "rank";
 
-const SELLERS: Seller[] = [
+const SELLERS: [Seller, Seller, Seller] = [
   { name: "Kel Vito", img: dealer, rep: 340, mood: "tough" },
   { name: "Lady Kızıl", img: enforcer, rep: 512, mood: "soft" },
   { name: "Don Rıza", img: boss, rep: 870, mood: "tough" },
@@ -50,7 +50,7 @@ function botReply(text: string, l: Listing): string {
   const pool = s.mood === "tough"
     ? ["Hı hı. Devam et.", "Bu silahı isteyen çok, acele et.", "Lafı dolandırma dostum."]
     : ["İlginç…", "Seni sevdim, ama iş iştir.", "Anlat bakalım, ne düşünüyorsun?"];
-  return pool[Math.floor(Math.random() * pool.length)];
+  return pool[Math.floor(Math.random() * pool.length)] ?? "Hı hı.";
 }
 
 /* ---------- Main ---------- */
@@ -119,7 +119,7 @@ export default function Game() {
     if (!listing || !trade?.counter) return;
     if (accept) {
       if (trade.counter > money) return flash("Yeterli paran yok");
-      patchTrade(listing.id, (t) => ({ ...t, status: "deal", final: t.counter, msgs: [...t.msgs, { from: "me", text: "Kabul ediyorum." }, { from: "sys", text: `ANLAŞMA: ${fmt(t.counter!)}` }] }));
+      patchTrade(listing.id, (t) => ({ ...t, status: "deal", final: t.counter ?? 0, msgs: [...t.msgs, { from: "me", text: "Kabul ediyorum." }, { from: "sys", text: `ANLAŞMA: ${fmt(t.counter!)}` }] }));
     } else {
       patchTrade(listing.id, (t) => ({ ...t, status: "open", msgs: [...t.msgs, { from: "me", text: "Reddediyorum." }, { from: "them", text: "Sen bilirsin. Başka teklifin varsa bekliyorum." }] }));
     }
@@ -130,7 +130,7 @@ export default function Game() {
     const price = trade.final;
     setMoney((m) => m - price);
     setSoldIds((s) => [...s, listing.id]);
-    setShipments((s) => [{ id: uid(), weapon: listing.weapon, ship: SHIPS[Math.floor(Math.random() * SHIPS.length)], from: listing.city, to: "İstanbul", start: Date.now(), duration: DEMO_SECONDS * 1000, price, claimed: false }, ...s]);
+    setShipments((s) => [{ id: uid(), weapon: listing.weapon, ship: SHIPS[Math.floor(Math.random() * SHIPS.length)] ?? "La Notte", from: listing.city, to: "İstanbul", start: Date.now(), duration: DEMO_SECONDS * 1000, price, claimed: false }, ...s]);
     flash("Silah kargoya verildi");
     go("port");
   };
