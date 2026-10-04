@@ -8,9 +8,9 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "UNDERWORLD: City of Shadows" },
-      { name: "description", content: "Noir gangster action game prototype. Fight, earn cash, buy weapons." },
+      { name: "description", content: "Noir çizgi roman gangster oyunu: Kara Borsa, pazarlık, liman kargosu ve ekip." },
       { property: "og:title", content: "UNDERWORLD: City of Shadows" },
-      { property: "og:description", content: "Noir gangster action game prototype for mobile." },
+      { property: "og:description", content: "Kara Borsada pazarlık yap, silahını kargola, ekibini kuşandır." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
