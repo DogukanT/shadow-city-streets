@@ -1,284 +1,500 @@
 import { useEffect, useRef, useState } from "react";
+import hero from "@/assets/hero.jpg";
+import boss from "@/assets/boss.jpg";
+import dealer from "@/assets/dealer.jpg";
+import enforcer from "@/assets/enforcer.jpg";
 
-type Weapon = { id: string; name: string; price: number; dmg: number; rate: number; color: string };
-const WEAPONS: Weapon[] = [
-  { id: "pistol", name: "Pistol", price: 0, dmg: 25, rate: 380, color: "#ddd" },
-  { id: "smg", name: "SMG", price: 2500, dmg: 20, rate: 110, color: "#ffd24a" },
-  { id: "ak", name: "AK-47", price: 7500, dmg: 45, rate: 140, color: "#ff5a3c" },
+/* ---------- Types & data ---------- */
+type Rarity = "common" | "rare" | "epic" | "legend";
+const RARITY_LABEL: Record<Rarity, string> = { common: "SIRADAN", rare: "NADİR", epic: "EPİK", legend: "EFSANE" };
+type Weapon = { uid: string; name: string; rarity: Rarity; dmg: number; dur: number };
+type Seller = { name: string; img: string; rep: number; mood: "tough" | "soft" };
+type Listing = { id: string; weapon: Weapon; seller: Seller; price: number; city: string };
+type Msg = { from: "me" | "them" | "sys"; text: string; offer?: number };
+type Trade = { listingId: string; msgs: Msg[]; status: "open" | "pending" | "counter" | "deal" | "rejected"; myOffer?: number; counter?: number; final?: number; rounds: number };
+type Shipment = { id: string; weapon: Weapon; ship: string; from: string; to: string; start: number; duration: number; price: number; claimed: boolean };
+type Member = { id: string; name: string; role: string; img: string; weaponUid: string | null; power: number };
+type Screen = "intro" | "city" | "hq" | "market" | "listing" | "escrow" | "port" | "war" | "crew" | "rank";
+
+const SELLERS: [Seller, Seller, Seller] = [
+  { name: "Kel Vito", img: dealer, rep: 340, mood: "tough" },
+  { name: "Lady Kızıl", img: enforcer, rep: 512, mood: "soft" },
+  { name: "Don Rıza", img: boss, rep: 870, mood: "tough" },
 ];
-const WORLD = 1400;
-const SHOP = { x: WORLD / 2, y: WORLD / 2 - 260, r: 60 };
+const mkW = (uid: string, name: string, rarity: Rarity, dmg: number, dur: number): Weapon => ({ uid, name, rarity, dmg, dur });
+const LISTINGS: Listing[] = [
+  { id: "l1", weapon: mkW("w-l1", "Tommy Gun '28", "rare", 62, 80), seller: SELLERS[0], price: 4200, city: "Atina" },
+  { id: "l2", weapon: mkW("w-l2", "Altın Kartal .50", "legend", 95, 95), seller: SELLERS[2], price: 14500, city: "Napoli" },
+  { id: "l3", weapon: mkW("w-l3", "Kızıl Dul SMG", "epic", 78, 70), seller: SELLERS[1], price: 8800, city: "Marsilya" },
+  { id: "l4", weapon: mkW("w-l4", "Sokak Tabancası", "common", 30, 60), seller: SELLERS[0], price: 900, city: "İzmir" },
+  { id: "l5", weapon: mkW("w-l5", "Gece Tüfeği", "rare", 70, 85), seller: SELLERS[1], price: 5600, city: "Selanik" },
+];
+const SHIPS = ["MV Kara Martı", "SS Gölge", "La Notte", "Deniz Kurdu"];
+const DEMO_SECONDS = 40; // gerçek sistemde en fazla 24 saat
+const STEPS = ["Ödeme emanette", "Konteynere yüklendi", "Denizde", "Gümrükten geçti", "Limana ulaştı"];
 
-type Enemy = { x: number; y: number; hp: number; hit: number; cd: number };
-type Bullet = { x: number; y: number; vx: number; vy: number; life: number; dmg: number; color: string };
-type State = {
-  px: number; py: number; hp: number; money: number; xp: number; level: number;
-  weapon: string; owned: string[]; enemies: Enemy[]; bullets: Bullet[]; kills: number;
-  missionDone: boolean; lastShot: number; flash: number; dead: boolean;
-};
+const fmt = (n: number) => "$" + n.toLocaleString("tr-TR");
+const uid = () => Math.random().toString(36).slice(2, 9);
 
-function newState(keep?: State): State {
-  const s: State = {
-    px: WORLD / 2, py: WORLD / 2, hp: 100, money: keep?.money ?? 0, xp: keep?.xp ?? 0,
-    level: keep?.level ?? 1, weapon: keep?.weapon ?? "pistol", owned: keep?.owned ?? ["pistol"],
-    enemies: [], bullets: [], kills: 0, missionDone: false, lastShot: 0, flash: 0, dead: false,
-  };
-  spawn(s);
-  return s;
-}
-function spawn(s: State) {
-  s.enemies = [];
-  for (let i = 0; i < 5; i++) {
-    const a = (i / 5) * Math.PI * 2 + Math.random();
-    s.enemies.push({ x: WORLD / 2 + Math.cos(a) * 550, y: WORLD / 2 + Math.sin(a) * 550, hp: 100, hit: 0, cd: 0 });
-  }
-}
-// static buildings
-const BUILDINGS: { x: number; y: number; w: number; h: number }[] = [];
-for (let gx = 0; gx < 7; gx++) for (let gy = 0; gy < 7; gy++) {
-  if ((gx === 3 && gy === 3) || (gx === 3 && gy === 2)) continue;
-  if ((gx * 7 + gy) % 3 === 0) BUILDINGS.push({ x: gx * 200 + 40, y: gy * 200 + 40, w: 110, h: 110 });
-}
-function blocked(x: number, y: number, r: number) {
-  if (x < r || y < r || x > WORLD - r || y > WORLD - r) return true;
-  return BUILDINGS.some((b) => x + r > b.x && x - r < b.x + b.w && y + r > b.y && y - r < b.y + b.h);
+/* ---------- Bot chat (free-text, keyword-based) ---------- */
+function botReply(text: string, l: Listing): string {
+  const t = text.toLocaleLowerCase("tr-TR");
+  const s = l.seller;
+  if (/merhaba|selam|hey|iyi akşam/.test(t)) return s.mood === "tough" ? `Selam. ${l.weapon.name} için mi geldin? Vaktim az.` : `Hoş geldin tatlım. ${l.weapon.name} göz kamaştırıcı, değil mi?`;
+  if (/hasar|güç|vur/.test(t)) return `Hasar ${l.weapon.dmg}. Bu şehirde bundan iyisini kolay bulamazsın.`;
+  if (/dayan|sağlam|durum|eski/.test(t)) return `Dayanıklılık %${l.weapon.dur}. Temiz iş, seri numarası kazınmış.`;
+  if (/indirim|ucuz|pahalı|fazla|düş/.test(t)) return s.mood === "tough" ? "Pazarlık yapacaksan bir teklif gönder. Laf değil, rakam konuşur." : "Belki biraz esnerim… Bir teklif yaz, bakalım.";
+  if (/kargo|teslim|gemi|liman/.test(t)) return `Mal ${l.city} limanında. Anlaşırsak ilk gemiyle yola çıkar.`;
+  if (/güven|polis|tuzak|emin/.test(t)) return "Ödeme Güvenli İşlem'de tutulur. İkimiz de dolandırılmayız.";
+  if (/\?$/.test(t)) return "Soruların çok. Kararını verince teklif gönder.";
+  const pool = s.mood === "tough"
+    ? ["Hı hı. Devam et.", "Bu silahı isteyen çok, acele et.", "Lafı dolandırma dostum."]
+    : ["İlginç…", "Seni sevdim, ama iş iştir.", "Anlat bakalım, ne düşünüyorsun?"];
+  return pool[Math.floor(Math.random() * pool.length)] ?? "Hı hı.";
 }
 
+/* ---------- Main ---------- */
 export default function Game() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const st = useRef<State | null>(null);
-  const joy = useRef({ active: false, id: -1, cx: 0, cy: 0, dx: 0, dy: 0 });
-  const firing = useRef(false);
-  const keys = useRef<Record<string, boolean>>({});
-  const [screen, setScreen] = useState<"start" | "play" | "shop" | "dead">("start");
-  const screenRef = useRef(screen);
-  screenRef.current = screen;
-  const [hud, setHud] = useState({ money: 0, hp: 100, xp: 0, level: 1, weapon: "Pistol", kills: 0, done: false, nearShop: false });
+  const [screen, setScreen] = useState<Screen>("intro");
+  const [money, setMoney] = useState(12000);
+  const [rep, setRep] = useState(150);
+  const [inventory, setInventory] = useState<Weapon[]>([mkW("w-start", "Eski Revolver", "common", 22, 50)]);
+  const [crew, setCrew] = useState<Member[]>([
+    { id: "m0", name: "Sen — 'Gölge'", role: "Patron", img: boss, weaponUid: "w-start", power: 40 },
+    { id: "m1", name: "Kızıl Leyla", role: "Tetikçi", img: enforcer, weaponUid: null, power: 35 },
+    { id: "m2", name: "Kurnaz Sami", role: "Kaçakçı", img: dealer, weaponUid: null, power: 28 },
+  ]);
+  const [soldIds, setSoldIds] = useState<string[]>([]);
+  const [trades, setTrades] = useState<Record<string, Trade>>({});
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [now, setNow] = useState(() => Date.now());
   const [toast, setToast] = useState("");
-  const [knob, setKnob] = useState({ x: 0, y: 0 });
 
-  useEffect(() => {
-    const kd = (e: KeyboardEvent) => { keys.current[e.key.toLowerCase()] = true; if (e.key === " ") firing.current = true; };
-    const ku = (e: KeyboardEvent) => { keys.current[e.key.toLowerCase()] = false; if (e.key === " ") firing.current = false; };
-    window.addEventListener("keydown", kd); window.addEventListener("keyup", ku);
-    let raf = 0, last = performance.now(), hudT = 0;
-    const loop = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000); last = now;
-      const s = st.current;
-      if (s && screenRef.current === "play") update(s, dt, now);
-      if (s) draw(s, now);
-      hudT += dt;
-      if (s && hudT > 0.1) {
-        hudT = 0;
-        const near = Math.hypot(s.px - SHOP.x, s.py - SHOP.y) < SHOP.r + 30;
-        setHud({ money: s.money, hp: Math.max(0, Math.round(s.hp)), xp: s.xp, level: s.level,
-          weapon: WEAPONS.find((w) => w.id === s.weapon)!.name, kills: s.kills, done: s.missionDone, nearShop: near });
-      }
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => { cancelAnimationFrame(raf); window.removeEventListener("keydown", kd); window.removeEventListener("keyup", ku); };
-  }, []);
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(t); }, []);
+  const flash = (t: string) => { setToast(t); window.setTimeout(() => setToast(""), 2200); };
+  const go = (s: Screen) => setScreen(s);
 
-  function flashToast(t: string) { setToast(t); setTimeout(() => setToast(""), 2200); }
+  const listing = LISTINGS.find((l) => l.id === activeId) ?? null;
+  const trade = activeId ? trades[activeId] : undefined;
+  const heldMoney = shipments.filter((s) => !s.claimed).reduce((a, s) => a + s.price, 0);
 
-  function update(s: State, dt: number, now: number) {
-    let mx = joy.current.dx, my = joy.current.dy;
-    const k = keys.current;
-    if (k["w"] || k["arrowup"]) my = -1; if (k["s"] || k["arrowdown"]) my = 1;
-    if (k["a"] || k["arrowleft"]) mx = -1; if (k["d"] || k["arrowright"]) mx = 1;
-    const m = Math.hypot(mx, my); if (m > 1) { mx /= m; my /= m; }
-    const sp = 220;
-    const nx = s.px + mx * sp * dt, ny = s.py + my * sp * dt;
-    if (!blocked(nx, s.py, 14)) s.px = nx;
-    if (!blocked(s.px, ny, 14)) s.py = ny;
+  const patchTrade = (id: string, fn: (t: Trade) => Trade) =>
+    setTrades((all) => ({ ...all, [id]: fn(all[id] ?? { listingId: id, msgs: [], status: "open", rounds: 0 }) }));
 
-    const w = WEAPONS.find((x) => x.id === s.weapon)!;
-    if (firing.current && now - s.lastShot > w.rate) {
-      let best: Enemy | null = null, bd = 600;
-      for (const e of s.enemies) { const d = Math.hypot(e.x - s.px, e.y - s.py); if (d < bd) { bd = d; best = e; } }
-      if (best) {
-        const a = Math.atan2(best.y - s.py, best.x - s.px) + (Math.random() - 0.5) * 0.06;
-        s.bullets.push({ x: s.px, y: s.py, vx: Math.cos(a) * 900, vy: Math.sin(a) * 900, life: 0.8, dmg: w.dmg, color: w.color });
-        s.lastShot = now; s.flash = 0.06;
-      }
-    }
-    s.flash -= dt;
-    for (const b of s.bullets) {
-      b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
-      if (blocked(b.x, b.y, 1)) b.life = 0;
-      for (const e of s.enemies) if (b.life > 0 && Math.hypot(e.x - b.x, e.y - b.y) < 16) { e.hp -= b.dmg; e.hit = 0.1; b.life = 0; }
-    }
-    s.bullets = s.bullets.filter((b) => b.life > 0);
-    const before = s.enemies.length;
-    s.enemies = s.enemies.filter((e) => e.hp > 0);
-    const killed = before - s.enemies.length;
-    if (killed) { s.kills += killed; s.money += 100 * killed; addXp(s, 20 * killed); }
-    if (!s.missionDone && s.kills >= 5) {
-      s.missionDone = true; s.money += 3000; addXp(s, 150);
-      flashToast("MISSION COMPLETE  +$3000  +150 XP");
-      setTimeout(() => { if (st.current === s && !s.dead) { s.kills = 0; s.missionDone = false; spawn(s); flashToast("NEW CREW INBOUND"); } }, 4000);
-    }
-    for (const e of s.enemies) {
-      const dx = s.px - e.x, dy = s.py - e.y, d = Math.hypot(dx, dy) || 1;
-      e.hit -= dt; e.cd -= dt;
-      if (d > 22) {
-        const ex = e.x + (dx / d) * 120 * dt, ey = e.y + (dy / d) * 120 * dt;
-        if (!blocked(ex, e.y, 13)) e.x = ex; if (!blocked(e.x, ey, 13)) e.y = ey;
-      } else if (e.cd <= 0) { s.hp -= 10; e.cd = 0.7; }
-    }
-    if (s.hp <= 0 && !s.dead) { s.dead = true; firing.current = false; setScreen("dead"); }
-  }
-  function addXp(s: State, n: number) {
-    s.xp += n;
-    while (s.xp >= s.level * 200) { s.xp -= s.level * 200; s.level++; s.hp = 100; }
-  }
-
-  function draw(s: State, now: number) {
-    const c = canvasRef.current; if (!c) return;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const W = c.clientWidth, H = c.clientHeight;
-    if (c.width !== W * dpr) { c.width = W * dpr; c.height = H * dpr; }
-    const g = c.getContext("2d")!;
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.fillStyle = "#0b0b10"; g.fillRect(0, 0, W, H);
-    g.save();
-    g.translate(Math.round(W / 2 - s.px), Math.round(H / 2 - s.py));
-    // streets
-    g.fillStyle = "#1a1a22"; g.fillRect(0, 0, WORLD, WORLD);
-    g.strokeStyle = "#3a3320"; g.lineWidth = 3; g.setLineDash([18, 18]);
-    for (let i = 0; i <= 7; i++) {
-      g.beginPath(); g.moveTo(i * 200 + 20, 0); g.lineTo(i * 200 + 20, WORLD); g.stroke();
-      g.beginPath(); g.moveTo(0, i * 200 + 20); g.lineTo(WORLD, i * 200 + 20); g.stroke();
-    }
-    g.setLineDash([]);
-    // buildings
-    for (const b of BUILDINGS) {
-      g.fillStyle = "#000"; g.fillRect(b.x + 8, b.y + 8, b.w, b.h);
-      g.fillStyle = "#26262f"; g.fillRect(b.x, b.y, b.w, b.h);
-      g.strokeStyle = "#000"; g.lineWidth = 4; g.strokeRect(b.x, b.y, b.w, b.h);
-      for (let wx = 0; wx < 3; wx++) for (let wy = 0; wy < 3; wy++) {
-        const lit = ((b.x + wx * 7 + wy * 13) % 5) < 2;
-        g.fillStyle = lit ? "#e8b94a" : "#111"; g.fillRect(b.x + 15 + wx * 32, b.y + 15 + wy * 32, 16, 16);
-      }
-    }
-    // shop
-    g.fillStyle = "#3b0d0d"; g.beginPath(); g.arc(SHOP.x, SHOP.y, SHOP.r, 0, 7); g.fill();
-    g.strokeStyle = `rgba(255,60,60,${0.6 + Math.sin(now / 200) * 0.4})`; g.lineWidth = 4; g.stroke();
-    g.fillStyle = "#ff4d4d"; g.font = "bold 18px Impact, sans-serif"; g.textAlign = "center"; g.fillText("GUN SHOP", SHOP.x, SHOP.y + 6);
-    // bullets
-    for (const b of s.bullets) { g.strokeStyle = b.color; g.lineWidth = 3; g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(b.x - b.vx * 0.02, b.y - b.vy * 0.02); g.stroke(); }
-    // enemies
-    for (const e of s.enemies) {
-      drawGuy(g, e.x, e.y, Math.atan2(s.py - e.y, s.px - e.x), e.hit > 0 ? "#fff" : "#8a1a1a", "#2a0a0a");
-      g.fillStyle = "#000"; g.fillRect(e.x - 16, e.y - 28, 32, 5);
-      g.fillStyle = "#e33"; g.fillRect(e.x - 16, e.y - 28, 32 * (e.hp / 100), 5);
-    }
-    // player
-    let aim = 0, bd = 1e9;
-    for (const e of s.enemies) { const d = Math.hypot(e.x - s.px, e.y - s.py); if (d < bd) { bd = d; aim = Math.atan2(e.y - s.py, e.x - s.px); } }
-    drawGuy(g, s.px, s.py, aim, "#d9c9a3", "#111");
-    if (s.flash > 0) { g.fillStyle = "#ffe066"; g.beginPath(); g.arc(s.px + Math.cos(aim) * 24, s.py + Math.sin(aim) * 24, 7, 0, 7); g.fill(); }
-    g.restore();
-    // vignette
-    const vg = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75);
-    vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,0.8)");
-    g.fillStyle = vg; g.fillRect(0, 0, W, H);
-  }
-  function drawGuy(g: CanvasRenderingContext2D, x: number, y: number, a: number, coat: string, hat: string) {
-    g.save(); g.translate(x, y); g.rotate(a);
-    g.fillStyle = "#000"; g.fillRect(8, -3, 18, 6);
-    g.fillStyle = coat; g.strokeStyle = "#000"; g.lineWidth = 3;
-    g.beginPath(); g.ellipse(0, 0, 12, 15, 0, 0, 7); g.fill(); g.stroke();
-    g.fillStyle = hat; g.beginPath(); g.arc(0, 0, 9, 0, 7); g.fill(); g.stroke();
-    g.restore();
-  }
-
-  // joystick handlers
-  const onJoyStart = (e: React.PointerEvent<HTMLDivElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    joy.current = { active: true, id: e.pointerId, cx: r.left + r.width / 2, cy: r.top + r.height / 2, dx: 0, dy: 0 };
-    e.currentTarget.setPointerCapture(e.pointerId); onJoyMove(e);
+  const openListing = (l: Listing) => {
+    setActiveId(l.id);
+    if (!trades[l.id]) patchTrade(l.id, (t) => ({ ...t, msgs: [{ from: "them", text: l.seller.mood === "tough" ? `${l.weapon.name}. Fiyat ${fmt(l.price)}. Ciddi alıcıysan konuşalım.` : `Gözün ${l.weapon.name}'de mi? ${fmt(l.price)}, ama seninle konuşurum.` }] }));
+    go("listing");
   };
-  const onJoyMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const j = joy.current; if (!j.active || e.pointerId !== j.id) return;
-    let dx = e.clientX - j.cx, dy = e.clientY - j.cy; const max = 55; const d = Math.hypot(dx, dy);
-    if (d > max) { dx = (dx / d) * max; dy = (dy / d) * max; }
-    j.dx = dx / max; j.dy = dy / max; setKnob({ x: dx, y: dy });
-  };
-  const onJoyEnd = () => { joy.current.active = false; joy.current.dx = 0; joy.current.dy = 0; setKnob({ x: 0, y: 0 }); };
 
-  const start = () => { st.current = newState(); setScreen("play"); };
-  const restart = () => { st.current = newState(st.current ?? undefined); setScreen("play"); };
-  const buy = (w: Weapon) => {
-    const s = st.current!; if (s.owned.includes(w.id)) { s.weapon = w.id; flashToast(`${w.name} equipped`); }
-    else if (s.money >= w.price) { s.money -= w.price; s.owned.push(w.id); s.weapon = w.id; flashToast(`Bought ${w.name}`); }
-    else flashToast("Not enough cash");
-    setHud((h) => ({ ...h, money: s.money, weapon: WEAPONS.find((x) => x.id === s.weapon)!.name }));
+  const sendText = (text: string) => {
+    if (!listing) return;
+    const l = listing;
+    patchTrade(l.id, (t) => ({ ...t, msgs: [...t.msgs, { from: "me", text }] }));
+    window.setTimeout(() => patchTrade(l.id, (t) => ({ ...t, msgs: [...t.msgs, { from: "them", text: botReply(text, l) }] })), 800 + Math.random() * 600);
   };
+
+  const sendOffer = (amount: number) => {
+    if (!listing || !trade) return;
+    const l = listing;
+    if (amount > money) return flash("Yeterli paran yok");
+    patchTrade(l.id, (t) => ({ ...t, status: "pending", myOffer: amount, msgs: [...t.msgs, { from: "me", text: `TEKLİF: ${fmt(amount)}`, offer: amount }] }));
+    window.setTimeout(() => {
+      const ratio = amount / l.price;
+      const floor = l.seller.mood === "tough" ? 0.88 : 0.8;
+      patchTrade(l.id, (t) => {
+        const rounds = t.rounds + 1;
+        if (ratio >= floor || (rounds >= 3 && ratio >= floor - 0.08))
+          return { ...t, rounds, status: "deal", final: amount, msgs: [...t.msgs, { from: "them", text: "Tamam. Anlaştık. El sıkışalım." }, { from: "sys", text: `ANLAŞMA: ${fmt(amount)}` }] };
+        if (ratio < 0.5)
+          return { ...t, rounds, status: "rejected", msgs: [...t.msgs, { from: "them", text: "Bu bir hakaret. REDDEDİLDİ. Yeni bir teklifle gel." }] };
+        const counter = Math.round(((amount + l.price) / 2) / 50) * 50;
+        return { ...t, rounds, status: "counter", counter, msgs: [...t.msgs, { from: "them", text: `Olmaz. Ama sana ${fmt(counter)} derim. KARŞI TEKLİF.`, offer: counter }] };
+      });
+    }, 1300);
+  };
+
+  const respondCounter = (accept: boolean) => {
+    if (!listing || !trade?.counter) return;
+    if (accept) {
+      if (trade.counter > money) return flash("Yeterli paran yok");
+      patchTrade(listing.id, (t) => ({ ...t, status: "deal", final: t.counter ?? 0, msgs: [...t.msgs, { from: "me", text: "Kabul ediyorum." }, { from: "sys", text: `ANLAŞMA: ${fmt(t.counter!)}` }] }));
+    } else {
+      patchTrade(listing.id, (t) => ({ ...t, status: "open", msgs: [...t.msgs, { from: "me", text: "Reddediyorum." }, { from: "them", text: "Sen bilirsin. Başka teklifin varsa bekliyorum." }] }));
+    }
+  };
+
+  const confirmEscrow = () => {
+    if (!listing || !trade?.final) return;
+    const price = trade.final;
+    setMoney((m) => m - price);
+    setSoldIds((s) => [...s, listing.id]);
+    setShipments((s) => [{ id: uid(), weapon: listing.weapon, ship: SHIPS[Math.floor(Math.random() * SHIPS.length)] ?? "La Notte", from: listing.city, to: "İstanbul", start: Date.now(), duration: DEMO_SECONDS * 1000, price, claimed: false }, ...s]);
+    flash("Silah kargoya verildi");
+    go("port");
+  };
+
+  const claim = (sh: Shipment) => {
+    setShipments((all) => all.map((s) => (s.id === sh.id ? { ...s, claimed: true } : s)));
+    setInventory((inv) => [...inv, sh.weapon]);
+    setRep((r) => r + 25);
+    flash(`${sh.weapon.name} envantere eklendi (+25 itibar)`);
+  };
+
+  const equip = (memberId: string, weaponUid: string | null) =>
+    setCrew((c) => c.map((m) => (m.id === memberId ? { ...m, weaponUid } : m.weaponUid === weaponUid && weaponUid ? { ...m, weaponUid: null } : m)));
+
+  const crewPower = crew.reduce((a, m) => a + m.power + (inventory.find((w) => w.uid === m.weaponUid)?.dmg ?? 0), 0);
+  const readyShip = shipments.some((s) => !s.claimed && now - s.start >= s.duration);
 
   return (
-    <div className="game-root">
-      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
-      {screen !== "start" && (
-        <div className="hud">
-          <div className="hud-row">
-            <span className="hud-chip text-money">${hud.money}</span>
-            <span className="hud-chip">LV {hud.level}</span>
-            <span className="hud-chip">{hud.weapon}</span>
-          </div>
-          <div className="hud-bar"><div className="hud-bar-fill bg-destructive" style={{ width: `${hud.hp}%` }} /><span>HP {hud.hp}</span></div>
-          <div className="hud-bar"><div className="hud-bar-fill bg-xp" style={{ width: `${(hud.xp / (hud.level * 200)) * 100}%` }} /><span>XP {hud.xp}/{hud.level * 200}</span></div>
-          <div className="hud-chip w-fit">{hud.done ? "MISSION COMPLETE" : `Eliminate gangsters: ${hud.kills}/5`}</div>
-        </div>
-      )}
-      {toast && <div className="toast-banner">{toast}</div>}
-      {screen === "play" && (
-        <>
-          <div className="joy" onPointerDown={onJoyStart} onPointerMove={onJoyMove} onPointerUp={onJoyEnd} onPointerCancel={onJoyEnd}>
-            <div className="joy-knob" style={{ transform: `translate(${knob.x}px, ${knob.y}px)` }} />
-          </div>
-          <button className="fire-btn" aria-label="Fire"
-            onPointerDown={(e) => { e.preventDefault(); firing.current = true; }}
-            onPointerUp={() => (firing.current = false)} onPointerLeave={() => (firing.current = false)} onPointerCancel={() => (firing.current = false)}>
-            FIRE
-          </button>
-          {hud.nearShop && <button className="shop-btn" onClick={() => { firing.current = false; onJoyEnd(); setScreen("shop"); }}>ENTER SHOP</button>}
-        </>
-      )}
-      {screen === "start" && (
-        <div className="overlay">
-          <h1 className="title">UNDERWORLD</h1>
-          <p className="subtitle">CITY OF SHADOWS</p>
-          <button className="big-btn" onClick={start}>PLAY</button>
-          <p className="hint">Left: move · FIRE: shoot nearest · Visit the red GUN SHOP</p>
-        </div>
-      )}
-      {screen === "dead" && (
-        <div className="overlay">
-          <h1 className="title text-destructive">WASTED</h1>
-          <p className="subtitle">Cash, XP & weapons kept</p>
-          <button className="big-btn" onClick={restart}>RESTART</button>
-        </div>
-      )}
-      {screen === "shop" && (
-        <div className="overlay">
-          <h2 className="title text-4xl">GUN SHOP</h2>
-          <p className="subtitle">Cash: ${hud.money}</p>
-          <div className="flex w-full max-w-sm flex-col gap-3">
-            {WEAPONS.map((w) => {
-              const owned = st.current?.owned.includes(w.id); const eq = st.current?.weapon === w.id;
-              return (
-                <button key={w.id} className="shop-item" onClick={() => buy(w)}>
-                  <span className="text-left"><b className="block text-lg">{w.name}</b><small>DMG {w.dmg} · {Math.round(60000 / w.rate)} RPM</small></span>
-                  <span className="text-money">{eq ? "EQUIPPED" : owned ? "EQUIP" : w.price ? `$${w.price}` : "FREE"}</span>
-                </button>
-              );
-            })}
-          </div>
-          <button className="big-btn mt-4" onClick={() => setScreen("play")}>BACK</button>
-        </div>
-      )}
+    <div className="app-shell">
+      <div className="app-frame">
+        {screen !== "intro" && (
+          <header className="topbar">
+            {screen !== "city" ? (
+              <button className="btn-comic btn-dark !px-3 !py-1 !text-sm" onClick={() => go(screen === "listing" ? "market" : screen === "escrow" ? "listing" : "city")}>◀ GERİ</button>
+            ) : (
+              <span className="font-display text-lg text-gold">UNDERWORLD</span>
+            )}
+            <div className="ml-auto flex min-w-0 gap-2">
+              <span className="chip">{fmt(money)}</span>
+              <span className="chip">★ {rep}</span>
+            </div>
+          </header>
+        )}
+
+        {screen === "intro" && <Intro onPlay={() => go("city")} />}
+        {screen === "city" && <City go={go} readyShip={readyShip} activeShips={shipments.filter((s) => !s.claimed).length} />}
+        {screen === "hq" && <HQ money={money} rep={rep} held={heldMoney} crew={crew} inventory={inventory} power={crewPower} go={go} />}
+        {screen === "market" && <Market sold={soldIds} trades={trades} onOpen={openListing} />}
+        {screen === "listing" && listing && trade && (
+          <ListingChat listing={listing} trade={trade} money={money} sold={soldIds.includes(listing.id)}
+            onText={sendText} onOffer={sendOffer} onCounter={respondCounter} onDeal={() => go("escrow")} />
+        )}
+        {screen === "escrow" && listing && trade?.final && <Escrow listing={listing} price={trade.final} onConfirm={confirmEscrow} />}
+        {screen === "port" && <Port shipments={shipments} now={now} onClaim={claim} go={go} />}
+        {screen === "crew" && <Crew crew={crew} inventory={inventory} onEquip={equip} />}
+        {screen === "war" && <War crew={crew} inventory={inventory} power={crewPower} />}
+        {screen === "rank" && <Rank rep={rep} power={crewPower} />}
+
+        {toast && <div className="caption burst absolute left-1/2 top-24 z-50 -translate-x-1/2 whitespace-nowrap !text-base">{toast}</div>}
+      </div>
     </div>
+  );
+}
+
+/* ---------- Screens ---------- */
+function Intro({ onPlay }: { onPlay: () => void }) {
+  return (
+    <div className="relative flex flex-1 flex-col">
+      <img src={hero} alt="Yağmurlu şehirde fötr şapkalı gangster" width={768} height={1344} className="absolute inset-0 h-full w-full object-cover" />
+      <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/40 to-transparent" />
+      <div className="relative mt-auto flex flex-col items-center gap-3 p-6 pb-[calc(env(safe-area-inset-bottom)+40px)] text-center">
+        <span className="caption burst">Bölüm I — Gölgelerin Şehri</span>
+        <h1 className="font-display text-6xl leading-none text-paper drop-shadow-[4px_4px_0_var(--crimson)]">UNDERWORLD</h1>
+        <p className="font-display tracking-[0.35em] text-gold">CITY OF SHADOWS</p>
+        <button className="btn-comic btn-red mt-4 w-56 !text-3xl" onClick={onPlay}>PLAY</button>
+      </div>
+    </div>
+  );
+}
+
+const DISTRICTS: { id: Screen; name: string; icon: string; desc: string; red?: boolean }[] = [
+  { id: "hq", name: "KARARGÂH", icon: "🏛️", desc: "Patron, ekip, kasa" },
+  { id: "market", name: "KARA BORSA", icon: "💼", desc: "Oyuncu silah pazarı", red: true },
+  { id: "port", name: "LİMAN", icon: "⚓", desc: "Kargo & teslimat" },
+  { id: "war", name: "BÖLGE SAVAŞI", icon: "⚔️", desc: "3v3 PvP", red: true },
+  { id: "crew", name: "EKİP", icon: "🕴️", desc: "Silah kuşan" },
+  { id: "rank", name: "SIRALAMA", icon: "👑", desc: "Şehrin en iyileri" },
+];
+function City({ go, readyShip, activeShips }: { go: (s: Screen) => void; readyShip: boolean; activeShips: number }) {
+  return (
+    <main className="screen">
+      <div className="panel mb-4 flex items-center gap-3 p-3">
+        <img src={boss} alt="Patron" className="portrait h-16 w-16 shrink-0" />
+        <div className="bubble bubble-them !max-w-none flex-1 !text-base">Şehir bizim olacak. Önce Kara Borsa'dan sağlam bir silah bul.</div>
+      </div>
+      <span className="caption mb-3">Şehir Merkezi</span>
+      <div className="mt-3 grid grid-cols-2 gap-4">
+        {DISTRICTS.map((d) => (
+          <button key={d.id} className={`panel district ${d.red ? "panel-red" : ""}`} onClick={() => go(d.id)}>
+            <span className="district-icon">{d.icon}</span>
+            <span className="font-display text-xl text-paper">{d.name}</span>
+            <span className="text-sm text-muted-foreground">{d.desc}</span>
+            {d.id === "port" && activeShips > 0 && <span className={`chip mt-1 w-fit ${readyShip ? "burst" : ""}`}>{readyShip ? "TESLİMAT HAZIR!" : `${activeShips} kargo yolda`}</span>}
+          </button>
+        ))}
+      </div>
+    </main>
+  );
+}
+
+function WeaponCard({ w, extra }: { w: Weapon; extra?: React.ReactNode }) {
+  return (
+    <div className="panel p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-display truncate text-lg text-paper">{w.name}</div>
+          <span className={`chip rarity-${w.rarity} !bg-ink`}>{RARITY_LABEL[w.rarity]}</span>
+        </div>
+        <div className="text-right text-sm">
+          <div>HASAR <b className="text-gold">{w.dmg}</b></div>
+          <div>DAYANIKLILIK <b className="text-gold">%{w.dur}</b></div>
+        </div>
+      </div>
+      {extra}
+    </div>
+  );
+}
+
+function HQ({ money, rep, held, crew, inventory, power, go }: { money: number; rep: number; held: number; crew: Member[]; inventory: Weapon[]; power: number; go: (s: Screen) => void }) {
+  return (
+    <main className="screen space-y-4">
+      <span className="caption">Karargâh</span>
+      <div className="panel flex gap-3 p-3">
+        <img src={boss} alt="Senin karakterin" className="portrait h-24 w-24 shrink-0" />
+        <div className="min-w-0 space-y-1">
+          <div className="font-display text-2xl text-paper">"GÖLGE"</div>
+          <div>Kasa: <b className="text-gold">{fmt(money)}</b></div>
+          {held > 0 && <div className="text-sm text-muted-foreground">Emanette: {fmt(held)}</div>}
+          <div>İtibar: <b className="text-gold">★ {rep}</b> · Güç: <b className="text-gold">{power}</b></div>
+        </div>
+      </div>
+      <div className="font-display text-lg text-gold">EKİP</div>
+      <div className="grid grid-cols-3 gap-3">
+        {crew.map((m) => (
+          <button key={m.id} className="panel p-2 text-center" onClick={() => go("crew")}>
+            <img src={m.img} alt={m.name} loading="lazy" className="portrait aspect-square w-full" />
+            <div className="font-display mt-1 truncate text-sm">{m.name.split(" —")[0]}</div>
+            <div className="truncate text-xs text-muted-foreground">{inventory.find((w) => w.uid === m.weaponUid)?.name ?? "Silahsız"}</div>
+          </button>
+        ))}
+      </div>
+      <div className="font-display text-lg text-gold">CEPHANELİK ({inventory.length})</div>
+      <div className="space-y-3">{inventory.map((w) => <WeaponCard key={w.uid} w={w} />)}</div>
+    </main>
+  );
+}
+
+function Market({ sold, trades, onOpen }: { sold: string[]; trades: Record<string, Trade>; onOpen: (l: Listing) => void }) {
+  return (
+    <main className="screen space-y-4">
+      <div className="flex items-center justify-between"><span className="caption">Kara Borsa</span><span className="text-sm text-muted-foreground">{LISTINGS.length - sold.length} aktif ilan</span></div>
+      {LISTINGS.map((l) => {
+        const isSold = sold.includes(l.id);
+        const t = trades[l.id];
+        return (
+          <button key={l.id} disabled={isSold} className="block w-full text-left disabled:opacity-50" onClick={() => onOpen(l)}>
+            <WeaponCard w={l.weapon} extra={
+              <div className="mt-3 flex items-center gap-2 border-t-2 border-dashed border-border pt-2">
+                <img src={l.seller.img} alt={l.seller.name} loading="lazy" className="portrait h-9 w-9 shrink-0 !border-2" />
+                <div className="min-w-0 flex-1 text-sm"><div className="truncate font-semibold">{l.seller.name}</div><div className="text-muted-foreground">★ {l.seller.rep} · {l.city}</div></div>
+                <div className="text-right">
+                  <div className="font-display text-xl text-gold">{fmt(l.price)}</div>
+                  <div className="text-xs">{isSold ? "SATILDI" : t?.status === "deal" ? "ANLAŞILDI" : t ? "SOHBET AÇIK" : "İLANA GİR ▶"}</div>
+                </div>
+              </div>
+            } />
+          </button>
+        );
+      })}
+    </main>
+  );
+}
+
+function ListingChat({ listing, trade, money, sold, onText, onOffer, onCounter, onDeal }: {
+  listing: Listing; trade: Trade; money: number; sold: boolean;
+  onText: (t: string) => void; onOffer: (n: number) => void; onCounter: (a: boolean) => void; onDeal: () => void;
+}) {
+  const [text, setText] = useState("");
+  const [offer, setOffer] = useState(String(Math.round(listing.price * 0.8)));
+  const endRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [trade.msgs.length]);
+  const send = () => { const t = text.trim(); if (!t) return; onText(t); setText(""); };
+  const offerNum = parseInt(offer.replace(/\D/g, ""), 10) || 0;
+
+  return (
+    <main className="relative z-[1] flex min-h-0 flex-1 flex-col">
+      <div className="p-3 pb-0"><WeaponCard w={listing.weapon} extra={
+        <div className="mt-2 flex items-center gap-2 text-sm">
+          <img src={listing.seller.img} alt={listing.seller.name} className="portrait h-10 w-10 shrink-0 !border-2" />
+          <span className="flex-1 font-semibold">{listing.seller.name} <span className="text-muted-foreground">· çevrimiçi ●</span></span>
+          <span className="font-display text-xl text-gold">{fmt(listing.price)}</span>
+        </div>} /></div>
+
+      <div className="flex-1 space-y-3 overflow-y-auto p-3">
+        {trade.msgs.map((m, i) => (
+          <div key={i} className={`bubble burst bubble-${m.from}`}>{m.text}</div>
+        ))}
+        {trade.status === "pending" && <div className="bubble bubble-them w-fit opacity-70">yazıyor…</div>}
+        <div ref={endRef} />
+      </div>
+
+      <div className="space-y-2 border-t-3 border-gold bg-ink p-3 pb-[calc(env(safe-area-inset-bottom)+12px)]">
+        {sold ? (
+          <div className="text-center font-display text-gold">BU SİLAH SENİN. LİMAN'DA TAKİP ET.</div>
+        ) : trade.status === "deal" ? (
+          <button className="btn-comic btn-green w-full burst" onClick={onDeal}>GÜVENLİ İŞLEME GEÇ ▶</button>
+        ) : trade.status === "counter" ? (
+          <div className="grid grid-cols-2 gap-2">
+            <button className="btn-comic btn-green" onClick={() => onCounter(true)}>KABUL {fmt(trade.counter!)}</button>
+            <button className="btn-comic btn-red" onClick={() => onCounter(false)}>REDDET</button>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <input className="field min-w-0 flex-1" inputMode="numeric" value={offer} onChange={(e) => setOffer(e.target.value)} aria-label="Teklif tutarı" />
+            <button className="btn-comic btn-red shrink-0 !px-3 !text-base" disabled={trade.status === "pending" || offerNum <= 0} onClick={() => onOffer(offerNum)}>TEKLİF GÖNDER</button>
+          </div>
+        )}
+        {!sold && trade.status !== "deal" && trade.status !== "counter" && (
+          <div className="text-xs text-muted-foreground">Kasan: {fmt(money)} · Satıcı kabul, red veya karşı teklif yapabilir.</div>
+        )}
+        <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); send(); }}>
+          <input className="field min-w-0 flex-1" placeholder="Mesaj yaz…" value={text} onChange={(e) => setText(e.target.value)} aria-label="Mesaj" />
+          <button type="submit" className="btn-comic shrink-0 !px-4 !text-base">GÖNDER</button>
+        </form>
+      </div>
+    </main>
+  );
+}
+
+function Escrow({ listing, price, onConfirm }: { listing: Listing; price: number; onConfirm: () => void }) {
+  return (
+    <main className="screen space-y-4">
+      <span className="caption">Güvenli İşlem</span>
+      <div className="panel burst p-4 text-center">
+        <div className="text-5xl">🔒</div>
+        <div className="font-display mt-2 text-2xl text-paper">ÖDEME EMANETTE TUTULACAK</div>
+        <p className="mt-2 text-muted-foreground">{fmt(price)} kasandan çekilir ve silah limana ulaşıp sen teslim alana kadar Underworld emanetinde bekler. Satıcı parayı ancak teslimattan sonra alır.</p>
+      </div>
+      <WeaponCard w={listing.weapon} />
+      <div className="panel space-y-2 p-3">
+        <div className="flex justify-between"><span>Satıcı</span><b>{listing.seller.name}</b></div>
+        <div className="flex justify-between"><span>Rota</span><b>{listing.city} → İstanbul</b></div>
+        <div className="flex justify-between"><span>Anlaşılan fiyat</span><b className="text-gold">{fmt(price)}</b></div>
+        <div className="flex justify-between text-sm text-muted-foreground"><span>Tahmini süre</span><span>en fazla 24 saat (demo: {DEMO_SECONDS} sn)</span></div>
+      </div>
+      <button className="btn-comic btn-green w-full" onClick={onConfirm}>ÖDEMEYİ ONAYLA & KARGOYA VER</button>
+    </main>
+  );
+}
+
+function Port({ shipments, now, onClaim, go }: { shipments: Shipment[]; now: number; onClaim: (s: Shipment) => void; go: (s: Screen) => void }) {
+  return (
+    <main className="screen space-y-4">
+      <span className="caption">Liman — Kargo Takibi</span>
+      <p className="text-sm text-muted-foreground">Gerçek sistemde teslimat süresi en fazla 24 saattir. Demo için süre {DEMO_SECONDS} saniyeye hızlandırıldı.</p>
+      {shipments.length === 0 && (
+        <div className="panel p-4 text-center">
+          <div className="text-4xl">⚓</div>
+          <p className="mt-2">Limanda bekleyen kargon yok.</p>
+          <button className="btn-comic btn-red mt-3" onClick={() => go("market")}>KARA BORSA'YA GİT</button>
+        </div>
+      )}
+      {shipments.map((s) => {
+        const p = Math.min(1, (now - s.start) / s.duration);
+        const step = Math.min(STEPS.length - 1, Math.floor(p * STEPS.length));
+        const left = Math.max(0, Math.ceil((s.duration - (now - s.start)) / 1000));
+        const done = p >= 1;
+        return (
+          <div key={s.id} className="panel space-y-3 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0"><div className="font-display truncate text-xl text-paper">🚢 {s.ship}</div><div className="text-sm">{s.from} → {s.to}</div></div>
+              <span className="chip">{s.claimed ? "TESLİM ALINDI" : done ? "HAZIR" : `00:${String(left).padStart(2, "0")}`}</span>
+            </div>
+            <div className="relative h-8 overflow-hidden border-2 border-ink bg-muted">
+              <div className="absolute inset-y-0 left-0 bg-crimson/60 transition-all duration-500" style={{ width: `${p * 100}%` }} />
+              <span className="absolute top-0.5 text-xl transition-all duration-500" style={{ left: `calc(${p * 100}% - ${p * 28}px)` }}>🚢</span>
+            </div>
+            <ol className="space-y-1 text-sm">
+              {STEPS.map((st, i) => (
+                <li key={st} className={i <= step || done ? "text-gold" : "text-muted-foreground"}>{i < step || done ? "✔" : i === step ? "●" : "○"} {st}</li>
+              ))}
+            </ol>
+            <div className="text-sm">Kargo: <b>{s.weapon.name}</b> · {fmt(s.price)}</div>
+            {done && !s.claimed && <button className="btn-comic btn-green w-full burst" onClick={() => onClaim(s)}>TESLİM AL</button>}
+            {s.claimed && <button className="btn-comic btn-dark w-full" onClick={() => go("crew")}>EKİBE KUŞANDIR ▶</button>}
+          </div>
+        );
+      })}
+    </main>
+  );
+}
+
+function Crew({ crew, inventory, onEquip }: { crew: Member[]; inventory: Weapon[]; onEquip: (m: string, w: string | null) => void }) {
+  return (
+    <main className="screen space-y-4">
+      <span className="caption">Ekip — Silah Kuşan</span>
+      {crew.map((m) => {
+        const w = inventory.find((x) => x.uid === m.weaponUid);
+        return (
+          <div key={m.id} className="panel flex gap-3 p-3">
+            <img src={m.img} alt={m.name} loading="lazy" className="portrait h-20 w-20 shrink-0" />
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="font-display truncate text-lg text-paper">{m.name}</div>
+              <div className="text-sm text-muted-foreground">{m.role} · Güç {m.power + (w?.dmg ?? 0)}</div>
+              <select className="field !py-2 !text-base" value={m.weaponUid ?? ""} onChange={(e) => onEquip(m.id, e.target.value || null)} aria-label={`${m.name} silahı`}>
+                <option value="">— Silahsız —</option>
+                {inventory.map((x) => <option key={x.uid} value={x.uid}>{x.name} (HSR {x.dmg})</option>)}
+              </select>
+            </div>
+          </div>
+        );
+      })}
+    </main>
+  );
+}
+
+const RIVALS = [{ name: "Kör Nazım", img: dealer }, { name: "Vera Mortis", img: enforcer }, { name: "Baron Kemal", img: boss }];
+function War({ crew, inventory, power }: { crew: Member[]; inventory: Weapon[]; power: number }) {
+  const [queued, setQueued] = useState(false);
+  return (
+    <main className="screen space-y-4">
+      <span className="caption">Bölge Savaşı — 3v3</span>
+      <div className="panel panel-red p-3 text-center">
+        <div className="font-display text-2xl text-paper">LİMAN BÖLGESİ İÇİN SAVAŞ</div>
+        <div className="text-sm">Kazanan ekip limanın kontrolünü ve haraç gelirini alır.</div>
+      </div>
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+        <div className="space-y-2">{crew.map((m) => (
+          <div key={m.id} className="panel flex items-center gap-2 p-1.5">
+            <img src={m.img} alt={m.name} loading="lazy" className="portrait h-12 w-12 shrink-0 !border-2" />
+            <div className="min-w-0 text-xs"><div className="truncate font-bold">{m.name.split(" —")[0]}</div><div className="truncate text-gold">{inventory.find((w) => w.uid === m.weaponUid)?.name ?? "Silahsız"}</div></div>
+          </div>))}</div>
+        <div className="font-display burst text-5xl text-gold drop-shadow-[3px_3px_0_var(--crimson)]">VS</div>
+        <div className="space-y-2">{RIVALS.map((r) => (
+          <div key={r.name} className="panel flex items-center gap-2 p-1.5">
+            <img src={r.img} alt={r.name} loading="lazy" className="portrait h-12 w-12 shrink-0 !border-2 grayscale" />
+            <div className="min-w-0 text-xs"><div className="truncate font-bold">{r.name}</div><div className="text-muted-foreground">???</div></div>
+          </div>))}</div>
+      </div>
+      <div className="panel p-3 text-center">Ekip gücün: <b className="font-display text-2xl text-gold">{power}</b> · Rakip: <b className="font-display text-2xl">~210</b></div>
+      <button className="btn-comic btn-red w-full" onClick={() => setQueued(true)}>{queued ? "SIRADA…" : "SAVAŞA KATIL"}</button>
+      {queued && <div className="bubble bubble-sys burst">Animasyonlu çizgi roman savaş sistemi bir sonraki sürümde (V0.3) geliyor. Silahlarını şimdiden topla!</div>}
+    </main>
+  );
+}
+
+function Rank({ rep, power }: { rep: number; power: number }) {
+  const rows = [
+    { name: "Don Rıza", rep: 870, img: boss }, { name: "Lady Kızıl", rep: 512, img: enforcer },
+    { name: "Kel Vito", rep: 340, img: dealer }, { name: "Gölge (Sen)", rep, img: boss, me: true },
+    { name: "Kör Nazım", rep: 120, img: dealer },
+  ].sort((a, b) => b.rep - a.rep);
+  return (
+    <main className="screen space-y-3">
+      <span className="caption">Şehir Sıralaması</span>
+      {rows.map((r, i) => (
+        <div key={r.name} className={`panel flex items-center gap-3 p-2 ${"me" in r ? "panel-red" : ""}`}>
+          <span className="font-display w-8 text-center text-2xl text-gold">{i + 1}</span>
+          <img src={r.img} alt={r.name} loading="lazy" className="portrait h-11 w-11 shrink-0 !border-2" />
+          <span className="flex-1 truncate font-semibold">{r.name}</span>
+          <span className="chip">★ {r.rep}</span>
+        </div>
+      ))}
+      <p className="text-center text-sm text-muted-foreground">Ekip gücün: {power}. Teslimatlar itibarını artırır.</p>
+    </main>
   );
 }
