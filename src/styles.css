@@ -142,3 +142,81 @@
     color: var(--color-foreground);
   }
 }
+
+/* ===== UNDERWORLD noir comic theme ===== */
+:root {
+  --background: oklch(0.13 0.01 30);
+  --foreground: oklch(0.93 0.03 85);
+  --card: oklch(0.18 0.012 30);
+  --card-foreground: oklch(0.93 0.03 85);
+  --primary: oklch(0.78 0.13 80);
+  --primary-foreground: oklch(0.13 0.01 30);
+  --secondary: oklch(0.42 0.17 25);
+  --secondary-foreground: oklch(0.95 0.02 85);
+  --muted: oklch(0.22 0.012 30);
+  --muted-foreground: oklch(0.65 0.03 80);
+  --accent: oklch(0.5 0.2 25);
+  --accent-foreground: oklch(0.97 0.01 85);
+  --destructive: oklch(0.58 0.22 25);
+  --border: oklch(0.78 0.13 80 / 35%);
+  --ink: oklch(0.06 0 0);
+  --gold: oklch(0.78 0.13 80);
+  --crimson: oklch(0.45 0.18 25);
+  --success: oklch(0.72 0.15 150);
+  --paper: oklch(0.9 0.04 85);
+  --r-common: oklch(0.7 0.01 80);
+  --r-rare: oklch(0.68 0.14 240);
+  --r-epic: oklch(0.65 0.2 320);
+  --r-legend: oklch(0.8 0.15 75);
+}
+@theme inline {
+  --color-gold: var(--gold);
+  --color-crimson: var(--crimson);
+  --color-ink: var(--ink);
+  --color-success: var(--success);
+  --color-paper: var(--paper);
+  --font-display: "Anton", Impact, sans-serif;
+  --font-body: "Barlow Condensed", "Arial Narrow", sans-serif;
+}
+body { font-family: var(--font-body); }
+
+@utility halftone {
+  background-image: radial-gradient(oklch(1 0 0 / 6%) 1px, transparent 1.2px);
+  background-size: 6px 6px;
+}
+@utility font-display { font-family: var(--font-display); letter-spacing: 0.03em; }
+
+@layer components {
+  .app-shell { position: fixed; inset: 0; display: flex; justify-content: center; background: var(--ink); }
+  .app-frame { position: relative; width: 100%; max-width: 480px; height: 100%; display: flex; flex-direction: column; background: var(--background); overflow: hidden; }
+  .app-frame::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: radial-gradient(oklch(1 0 0 / 4%) 1px, transparent 1.2px); background-size: 6px 6px; z-index: 0; }
+  .topbar { position: relative; z-index: 2; display: flex; align-items: center; gap: 8px; padding: calc(env(safe-area-inset-top) + 10px) 12px 10px; background: var(--ink); border-bottom: 3px solid var(--gold); }
+  .screen { position: relative; z-index: 1; flex: 1; overflow-y: auto; padding: 14px 14px calc(env(safe-area-inset-bottom) + 20px); animation: panel-in .35s cubic-bezier(.2,.9,.3,1.2); }
+  .panel { position: relative; background: var(--card); border: 3px solid var(--ink); box-shadow: 0 0 0 2px var(--gold), 6px 6px 0 2px var(--ink); }
+  .panel-red { background: var(--crimson); }
+  .caption { display: inline-block; background: var(--paper); color: var(--ink); font-family: var(--font-display); text-transform: uppercase; padding: 4px 10px; border: 2px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); font-size: 13px; letter-spacing: .05em; }
+  .btn-comic { font-family: var(--font-display); text-transform: uppercase; letter-spacing: .06em; background: var(--gold); color: var(--ink); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: 12px 18px; font-size: 18px; transition: transform .08s; }
+  .btn-comic:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 var(--ink); }
+  .btn-comic:disabled { opacity: .45; }
+  .btn-red { background: var(--crimson); color: var(--paper); }
+  .btn-dark { background: var(--muted); color: var(--foreground); }
+  .btn-green { background: var(--success); color: var(--ink); }
+  .chip { font-family: var(--font-display); background: var(--ink); border: 2px solid var(--gold); color: var(--gold); padding: 2px 8px; font-size: 14px; white-space: nowrap; }
+  .bubble { position: relative; max-width: 78%; padding: 8px 12px; border: 2.5px solid var(--ink); font-size: 17px; line-height: 1.2; box-shadow: 3px 3px 0 var(--ink); }
+  .bubble-me { margin-left: auto; background: var(--gold); color: var(--ink); border-radius: 16px 16px 2px 16px; }
+  .bubble-them { background: var(--paper); color: var(--ink); border-radius: 16px 16px 16px 2px; }
+  .bubble-sys { margin: 0 auto; max-width: 92%; background: var(--crimson); color: var(--paper); font-family: var(--font-display); text-align: center; font-size: 14px; border-radius: 0; }
+  .portrait { object-fit: cover; border: 3px solid var(--ink); box-shadow: 0 0 0 2px var(--gold); }
+  .field { width: 100%; background: var(--ink); color: var(--foreground); border: 2px solid var(--gold); padding: 10px 12px; font-size: 17px; outline: none; }
+  .rarity-common { color: var(--r-common); border-color: var(--r-common); }
+  .rarity-rare { color: var(--r-rare); border-color: var(--r-rare); }
+  .rarity-epic { color: var(--r-epic); border-color: var(--r-epic); }
+  .rarity-legend { color: var(--r-legend); border-color: var(--r-legend); }
+  .district { display: flex; flex-direction: column; justify-content: flex-end; min-height: 120px; padding: 10px; text-align: left; overflow: hidden; }
+  .district-icon { font-size: 34px; filter: drop-shadow(2px 2px 0 var(--ink)); }
+  .bar { height: 12px; background: var(--ink); border: 2px solid var(--gold); }
+  .bar > div { height: 100%; background: var(--gold); transition: width 1s linear; }
+  .burst { animation: burst .5s ease-out; }
+}
+@keyframes panel-in { from { opacity: 0; transform: translateX(30px) skewX(-4deg); } to { opacity: 1; transform: none; } }
+@keyframes burst { 0% { transform: scale(.4) rotate(-8deg); opacity: 0; } 70% { transform: scale(1.1) rotate(2deg); } 100% { transform: none; opacity: 1; } }
