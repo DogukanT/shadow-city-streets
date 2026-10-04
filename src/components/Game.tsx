@@ -297,7 +297,7 @@ function Story({ node, setNode, onEffect, go }: { node: string; setNode: (n: str
   const n = STORY[node] ?? STORY["s0"]!;
   return (
     <main className="screen space-y-4">
-      <span className="caption">Bölüm I — Kayıp Sevkiyat</span>
+      <div className="flex items-center justify-between gap-2"><span className="caption">Bölüm I — Kayıp Sevkiyat</span><button className="btn-comic btn-dark !px-3 !py-1 !text-sm" onClick={() => go("city")}>SAFEHOUSE ▶</button></div>
       <div key={node} className="panel burst overflow-hidden">
         <div className="relative">
           <img src={n.img} alt={n.speaker} className="aspect-[4/3] w-full object-cover" />
@@ -529,7 +529,7 @@ function Port({ shipments, now, onClaim, go }: { shipments: Shipment[]; now: num
           <div key={s.id} className="panel space-y-3 p-3">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0"><div className="font-display truncate text-xl text-paper">🚢 {s.ship}</div><div className="text-sm">{s.from} → {s.to}</div></div>
-              <span className="chip">{s.claimed ? "TESLİM ALINDI" : done ? "HAZIR" : `00:${String(left).padStart(2, "0")}`}</span>
+              <span className="chip">{s.claimed ? "TESLİM ALINDI" : done ? "HAZIR" : `${String(Math.floor(left / 60)).padStart(2, "0")}:${String(left % 60).padStart(2, "0")}`}</span>
             </div>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="border-2 border-border p-1.5"><div className="text-muted-foreground">KALKIŞ · {s.from}</div><b>{fmtClock(s.start)}</b></div>
