@@ -236,9 +236,9 @@ const HOTSPOTS: Hot[] = [
   { x: 14, y: 22, label: "KARA BORSA", to: "market" },
   { x: 50, y: 40, label: "KARARGÂH", to: "hq" },
   { x: 84, y: 50, label: "LİMAN", to: "port" },
-  { x: 8, y: 66, label: "Kapıcı Bruno", to: "story", npc: { img: dealer, line: "Patron seni soruyordu. Limanda bir iş var…" } },
+  { x: 16, y: 70, label: "Kapıcı Bruno", to: "story", npc: { img: dealer, line: "Patron seni soruyordu. Limanda bir iş var…" } },
   { x: 34, y: 58, label: "Çete Toplantısı", to: "gang", npc: { img: enforcer, line: "Aile kasası boşalıyor. Katkı lazım." } },
-  { x: 92, y: 66, label: "Vera'nın Adamı", to: "war", npc: { img: boss, line: "Liman bölgesi bizim. Gücün yeter mi?" } },
+  { x: 84, y: 68, label: "Vera'nın Adamı", to: "war", npc: { img: boss, line: "Liman bölgesi bizim. Gücün yeter mi?" } },
 ];
 function City({ go, readyShip, activeShips }: { go: (s: Screen) => void; readyShip: boolean; activeShips: number }) {
   const [npc, setNpc] = useState<Hot | null>(null);
