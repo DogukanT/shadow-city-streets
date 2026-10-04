@@ -288,7 +288,7 @@ const STORY: Record<string, StoryNode> = {
     { label: "Bölümü baştan oyna", next: "s0" }] },
 };
 function Story({ node, setNode, onEffect, go }: { node: string; setNode: (n: string) => void; onEffect: (dm: number, dr: number) => void; go: (s: Screen) => void }) {
-  const n = STORY[node] ?? STORY.s0!;
+  const n = STORY[node] ?? STORY["s0"]!;
   return (
     <main className="screen space-y-4">
       <span className="caption">Bölüm I — Kayıp Sevkiyat</span>
