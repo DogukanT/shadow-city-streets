@@ -15,7 +15,7 @@ type Msg = { from: "me" | "them" | "sys"; text: string; offer?: number };
 type Trade = { listingId: string; msgs: Msg[]; status: "open" | "pending" | "counter" | "deal" | "rejected"; myOffer?: number; counter?: number; final?: number; rounds: number };
 type Shipment = { id: string; weapon: Weapon; ship: string; from: string; to: string; start: number; duration: number; price: number; claimed: boolean };
 type Member = { id: string; name: string; role: string; img: string; weaponUid: string | null; power: number };
-type Screen = "intro" | "city" | "hq" | "market" | "listing" | "escrow" | "port" | "war" | "crew" | "rank" | "story" | "gang" | "zones";
+type Screen = "intro" | "city" | "hq" | "market" | "listing" | "escrow" | "port" | "war" | "crew" | "rank" | "story" | "gang" | "zones" | "detail" | "inventory";
 
 const SELLERS: [Seller, Seller, Seller] = [
   { name: "Kel Vito", img: dealer, rep: 340, mood: "tough", trades: 87, rating: 4.6, since: "Mart 2026", gang: "Liman Fareleri" },
@@ -24,19 +24,20 @@ const SELLERS: [Seller, Seller, Seller] = [
 ];
 const mkW = (uid: string, name: string, rarity: Rarity, dmg: number, dur: number): Weapon => ({ uid, name, rarity, dmg, dur });
 const LISTINGS: Listing[] = [
-  { id: "l1", weapon: mkW("w-l1", "Tommy Gun '28", "rare", 62, 80), seller: SELLERS[0], price: 4200, city: "Atina" },
+  { id: "l1", weapon: mkW("w-l1", "AK-47 REDLINE", "epic", 74, 88), seller: SELLERS[0], price: 6800, city: "İstanbul" },
+  { id: "l6", weapon: mkW("w-l6", "Tommy Gun '28", "rare", 62, 80), seller: SELLERS[1], price: 4200, city: "İzmir" },
   { id: "l2", weapon: mkW("w-l2", "Altın Kartal .50", "legend", 95, 95), seller: SELLERS[2], price: 14500, city: "Napoli" },
   { id: "l3", weapon: mkW("w-l3", "Kızıl Dul SMG", "epic", 78, 70), seller: SELLERS[1], price: 8800, city: "Marsilya" },
   { id: "l4", weapon: mkW("w-l4", "Sokak Tabancası", "common", 30, 60), seller: SELLERS[0], price: 900, city: "İzmir" },
   { id: "l5", weapon: mkW("w-l5", "Gece Tüfeği", "rare", 70, 85), seller: SELLERS[1], price: 5600, city: "Selanik" },
 ];
-const SHIPS = ["MV Kara Martı", "SS Gölge", "La Notte", "Deniz Kurdu"];
+const SHIPS = ["BLACK SEA 07"];
 // Üretim: değere göre 5 dk – 24 saat. Prototip: hızlandırılmış (15–60 sn).
 const realDeliveryMin = (price: number) => Math.round(Math.min(1440, Math.max(5, 5 + (price / 15000) * 1435)));
 const demoDeliverySec = (price: number) => Math.round(Math.min(60, Math.max(15, 15 + price / 350)));
 const fmtDur = (min: number) => (min >= 60 ? `${Math.floor(min / 60)} sa ${min % 60} dk` : `${min} dk`);
 const fmtClock = (t: number) => new Date(t).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-const STEPS = ["Ödeme emanette", "Konteynere yüklendi", "Denizde", "Gümrükten geçti", "Limana ulaştı"];
+const STEPS = ["Sipariş hazırlandı", "Limanda", "Gemi yola çıktı", "Varış limanı", "Depoda", "Teslim edildi"];
 
 const fmt = (n: number) => "$" + n.toLocaleString("tr-TR");
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -76,6 +77,8 @@ export default function Game() {
   const [now, setNow] = useState(() => Date.now());
   const [toast, setToast] = useState("");
   const [storyNode, setStoryNode] = useState("s0");
+  const [newItem, setNewItem] = useState<string | null>(null);
+  const [focusOffer, setFocusOffer] = useState(false);
   const [gangVault, setGangVault] = useState(4200);
 
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(t); }, []);
@@ -92,7 +95,7 @@ export default function Game() {
   const openListing = (l: Listing) => {
     setActiveId(l.id);
     if (!trades[l.id]) patchTrade(l.id, (t) => ({ ...t, msgs: [{ from: "them", text: l.seller.mood === "tough" ? `${l.weapon.name}. Fiyat ${fmt(l.price)}. Ciddi alıcıysan konuşalım.` : `Gözün ${l.weapon.name}'de mi? ${fmt(l.price)}, ama seninle konuşurum.` }] }));
-    go("listing");
+    go("detail");
   };
 
   const sendText = (text: string) => {
@@ -137,7 +140,7 @@ export default function Game() {
     const price = trade.final;
     setMoney((m) => m - price);
     setSoldIds((s) => [...s, listing.id]);
-    setShipments((s) => [{ id: uid(), weapon: listing.weapon, ship: SHIPS[Math.floor(Math.random() * SHIPS.length)] ?? "La Notte", from: listing.city, to: "İstanbul", start: Date.now(), duration: demoDeliverySec(price) * 1000, price, claimed: false }, ...s]);
+    setShipments((s) => [{ id: uid(), weapon: listing.weapon, ship: SHIPS[0] ?? "BLACK SEA 07", from: listing.city, to: "Atina", start: Date.now(), duration: demoDeliverySec(price) * 1000, price, claimed: false }, ...s]);
     flash("Silah kargoya verildi");
     go("port");
   };
@@ -147,6 +150,8 @@ export default function Game() {
     setInventory((inv) => [...inv, sh.weapon]);
     setRep((r) => r + 25);
     flash(`${sh.weapon.name} envantere eklendi (+25 itibar)`);
+    setNewItem(sh.weapon.uid);
+    go("inventory");
   };
 
   const equip = (memberId: string, weaponUid: string | null) =>
@@ -160,8 +165,8 @@ export default function Game() {
       <div className="app-frame">
         {screen !== "intro" && (
           <header className="topbar">
-            {screen === "listing" || screen === "escrow" ? (
-              <button className="btn-comic btn-dark !px-3 !py-1 !text-sm" onClick={() => go(screen === "listing" ? "market" : "listing")}>◀ GERİ</button>
+            {screen === "listing" || screen === "escrow" || screen === "detail" ? (
+              <button className="btn-comic btn-dark !px-3 !py-1 !text-sm" onClick={() => go(screen === "listing" ? "detail" : screen === "detail" ? "market" : "listing")}>◀ GERİ</button>
             ) : (
               <span className="font-display truncate text-lg text-gold">{TITLES[screen]}</span>
             )}
@@ -173,16 +178,19 @@ export default function Game() {
         )}
 
         {screen === "intro" && <Intro onPlay={() => go("story")} />}
-        {screen === "city" && <City go={go} readyShip={readyShip} activeShips={shipments.filter((s) => !s.claimed).length} />}
+        {screen === "city" && <City go={go} readyShip={readyShip} activeShips={shipments.filter((s) => !s.claimed).length} money={money} rep={rep} invCount={inventory.length} />}
         {screen === "story" && <Story node={storyNode} setNode={setStoryNode} onEffect={(dm, dr) => { setMoney((m) => m + dm); setRep((r) => r + dr); }} go={go} />}
         {screen === "gang" && <Gang money={money} rep={rep} crew={crew} onDonate={(n) => { if (n > money) return flash("Yeterli paran yok"); setMoney((m) => m - n); setGangVault((v) => v + n); setRep((r) => r + Math.round(n / 100)); flash(`Çete kasasına ${fmt(n)} (+${Math.round(n / 100)} itibar)`); }} vault={gangVault} />}
         {screen === "hq" && <HQ money={money} rep={rep} held={heldMoney} crew={crew} inventory={inventory} power={crewPower} go={go} />}
         {screen === "market" && <Market sold={soldIds} trades={trades} onOpen={openListing} />}
         {screen === "listing" && listing && trade && (
-          <ListingChat listing={listing} trade={trade} money={money} sold={soldIds.includes(listing.id)}
-            onText={sendText} onOffer={sendOffer} onCounter={respondCounter} onDeal={() => go("escrow")} />
+          <ListingChat listing={listing} trade={trade} money={money} sold={soldIds.includes(listing.id)} focusOffer={focusOffer}
+            onText={sendText} onOffer={sendOffer} onCounter={respondCounter} onDeal={() => go("escrow")}
+            onAccept={(n) => { if (n > money) return flash("Yeterli paran yok"); patchTrade(listing.id, (t) => ({ ...t, status: "deal", final: n, msgs: [...t.msgs, { from: "me", text: `İlan fiyatını kabul ediyorum: ${fmt(n)}` }, { from: "them", text: "Akıllıca. Anlaştık." }, { from: "sys", text: `ANLAŞMA: ${fmt(n)}` }] })); }} />
         )}
         {screen === "escrow" && listing && trade?.final && <Escrow listing={listing} price={trade.final} onConfirm={confirmEscrow} />}
+        {screen === "detail" && listing && <Detail listing={listing} sold={soldIds.includes(listing.id)} onMsg={() => { setFocusOffer(false); go("listing"); }} onOffer={() => { setFocusOffer(true); go("listing"); }} />}
+        {screen === "inventory" && <Inventory inventory={inventory} crew={crew} highlight={newItem} onEquip={(m, w) => { equip(m, w); flash("Silah kuşandırıldı"); }} go={(s) => { setNewItem(null); go(s); }} />}
         {screen === "port" && <Port shipments={shipments} now={now} onClaim={claim} go={go} />}
         {screen === "crew" && <Crew crew={crew} inventory={inventory} onEquip={equip} />}
         {screen === "war" && <War key={crew.map((m) => m.weaponUid).join()} crew={crew} inventory={inventory} power={crewPower} />}
@@ -213,7 +221,7 @@ function Intro({ onPlay }: { onPlay: () => void }) {
 }
 
 const TITLES: Record<Screen, string> = {
-  intro: "", city: "SAFEHOUSE", zones: "BÖLGELER", hq: "KARARGÂH", market: "KARA BORSA", listing: "İLAN", escrow: "SÖZLEŞME",
+  intro: "", city: "SAFEHOUSE", zones: "BÖLGELER", detail: "İLAN DETAYI", inventory: "ENVANTER", hq: "KARARGÂH", market: "KARA BORSA", listing: "SOHBET", escrow: "SÖZLEŞME",
   port: "KARGO", war: "REKABET", crew: "EKİP", rank: "SIRALAMA", story: "HİKÂYE", gang: "GANG",
 };
 const NAV: { id: Screen; icon: string; label: string }[] = [
@@ -223,7 +231,7 @@ const NAV: { id: Screen; icon: string; label: string }[] = [
   { id: "zones", icon: "🗺️", label: "Bölge" }, { id: "war", icon: "⚔️", label: "Rekabet" },
 ];
 function BottomNav({ screen, go, alert }: { screen: Screen; go: (s: Screen) => void; alert: boolean }) {
-  const active = screen === "listing" || screen === "escrow" ? "market" : screen === "hq" ? "city" : screen;
+  const active = screen === "listing" || screen === "escrow" || screen === "detail" ? "market" : screen === "inventory" ? "crew" : screen === "hq" ? "city" : screen;
   return (
     <nav className="bottom-nav" aria-label="Ana menü">
       {NAV.map((n) => (
@@ -236,44 +244,53 @@ function BottomNav({ screen, go, alert }: { screen: Screen; go: (s: Screen) => v
   );
 }
 
-type Hot = { x: number; y: number; label: string; to: Screen; npc?: { img: string; line: string } };
-const HOTSPOTS: Hot[] = [
-  { x: 14, y: 22, label: "KARA BORSA", to: "market" },
-  { x: 50, y: 40, label: "SAFEHOUSE", to: "hq" },
-  { x: 62, y: 14, label: "SIRALAMA", to: "rank" },
-  { x: 84, y: 50, label: "LİMAN", to: "port" },
-  { x: 16, y: 70, label: "Kapıcı Bruno", to: "story", npc: { img: dealer, line: "Patron seni soruyordu. Limanda bir iş var…" } },
-  { x: 34, y: 58, label: "Çete Toplantısı", to: "gang", npc: { img: enforcer, line: "Aile kasası boşalıyor. Katkı lazım." } },
-  { x: 84, y: 68, label: "Vera'nın Adamı", to: "war", npc: { img: boss, line: "Liman bölgesi bizim. Gücün yeter mi?" } },
+const CARDS: { id: Screen; name: string; icon: string; desc: string; red?: boolean; wide?: boolean }[] = [
+  { id: "story", name: "HİKAYE", icon: "📖", desc: "Bölüm I · Kayıp Sevkiyat", red: true },
+  { id: "market", name: "KARA BORSA", icon: "💼", desc: "Oyuncular arası silah ticareti" },
+  { id: "crew", name: "EKİP", icon: "🕴️", desc: "Adamların & silahları" },
+  { id: "war", name: "REKABET", icon: "⚔️", desc: "3v3 çete savaşı", red: true },
+  { id: "gang", name: "GANG", icon: "🃏", desc: "Gölge Ailesi" },
+  { id: "zones", name: "BÖLGELER", icon: "🗺️", desc: "Haraç & kontrol" },
+  { id: "rank", name: "SIRALAMA", icon: "👑", desc: "Şehrin en tehlikelileri", wide: true },
 ];
-function City({ go, readyShip, activeShips }: { go: (s: Screen) => void; readyShip: boolean; activeShips: number }) {
-  const [npc, setNpc] = useState<Hot | null>(null);
+function City({ go, readyShip, activeShips, money, rep, invCount }: { go: (s: Screen) => void; readyShip: boolean; activeShips: number; money: number; rep: number; invCount: number }) {
+  const level = 1 + Math.floor(rep / 100);
   return (
-    <main className="screen !p-0">
-      <div className="relative w-full overflow-hidden border-b-4 border-ink" style={{ aspectRatio: "768 / 1152", maxHeight: "calc(100% - 4px)" }}>
-        <img src={cityImg} alt="Gece noir şehir sokağı, bar, konak ve liman" width={768} height={1152} className="absolute inset-0 h-full w-full object-cover" />
-        <span className="caption absolute left-3 top-3 z-[2]">Safehouse · Gölge Sokağı</span>
-        {HOTSPOTS.map((h) => (
-          <button key={h.label} className={`hotspot ${h.npc ? "hotspot-npc" : ""}`} style={{ left: `${h.x}%`, top: `${h.y}%` }}
-            onClick={() => (h.npc ? setNpc(h) : go(h.to))} aria-label={h.label}>
-            <span className="hotspot-ring" />
-            <span className="hotspot-label">{h.label}{h.to === "port" && activeShips > 0 ? (readyShip ? " · HAZIR!" : ` · ${activeShips}`) : ""}</span>
-          </button>
-        ))}
-        <div className="absolute inset-x-3 bottom-3 z-[3] flex items-end gap-2">
-          <img src={boss} alt="Senin karakterin Gölge" className="portrait h-20 w-20 shrink-0" />
-          <div className="bubble bubble-them burst !max-w-none flex-1 !text-base">
-            {npc ? <><b>{npc.label}:</b> {npc.npc!.line}</> : "Bu şehir bir gün benim olacak. Önce Kara Borsa'dan sağlam bir silah lazım."}
+    <main className="screen space-y-4">
+      <div className="panel overflow-hidden">
+        <div className="relative h-44">
+          <img src={cityImg} alt="Gece noir şehir" width={768} height={1152} className="absolute inset-0 h-full w-full object-cover object-[50%_35%]" />
+          <div className="absolute inset-0 bg-gradient-to-t from-card via-card/30 to-transparent" />
+          <span className="caption absolute left-3 top-3">Safehouse · Gölge Sokağı</span>
+          <div className="bubble bubble-them absolute right-3 top-12 !max-w-[60%] !text-sm">Bu şehir bir gün benim olacak.</div>
+        </div>
+        <div className="relative -mt-14 flex items-end gap-3 px-3 pb-3">
+          <img src={boss} alt="Senin karakterin Gölge" className="portrait h-24 w-24 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <div className="font-display truncate text-2xl text-paper">"GÖLGE"</div>
+            <div className="text-sm text-muted-foreground">Seviye {level} · Gölge Ailesi Patronu</div>
+            <div className="bar mt-1"><div style={{ width: `${rep % 100}%` }} /></div>
           </div>
         </div>
-      </div>
-      {npc && (
-        <div className="flex gap-2 p-3">
-          <img src={npc.npc!.img} alt={npc.label} className="portrait h-14 w-14 shrink-0" />
-          <button className="btn-comic btn-red flex-1" onClick={() => go(npc.to)}>{npc.to === "story" ? "HİKÂYEYE GİR" : npc.to === "gang" ? "ÇETEYE GİT" : "REKABETE BAK"} ▶</button>
-          <button className="btn-comic btn-dark" onClick={() => setNpc(null)}>✕</button>
+        <div className="grid grid-cols-3 border-t-2 border-border text-center">
+          <div className="p-2"><div className="text-xs text-muted-foreground">NAKİT</div><div className="font-display text-lg text-gold">{fmt(money)}</div></div>
+          <div className="border-x-2 border-border p-2"><div className="text-xs text-muted-foreground">İTİBAR</div><div className="font-display text-lg text-gold">★ {rep}</div></div>
+          <div className="p-2"><div className="text-xs text-muted-foreground">SEVİYE</div><div className="font-display text-lg text-gold">{level}</div></div>
         </div>
-      )}
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        {CARDS.map((d) => (
+          <button key={d.id} className={`panel district ${d.red ? "panel-red" : ""} ${d.wide ? "col-span-2 !min-h-[90px]" : ""}`} onClick={() => go(d.id)}>
+            <span className="district-icon">{d.icon}</span>
+            <span className="font-display text-xl text-paper">{d.name}</span>
+            <span className="text-sm text-muted-foreground">{d.desc}</span>
+          </button>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <button className={`btn-comic btn-dark ${readyShip ? "burst !bg-success !text-ink" : ""}`} onClick={() => go("port")}>⚓ KARGO {activeShips > 0 ? (readyShip ? "· HAZIR" : `· ${activeShips}`) : ""}</button>
+        <button className="btn-comic btn-dark" onClick={() => go("inventory")}>🎒 ENVANTER · {invCount}</button>
+      </div>
     </main>
   );
 }
@@ -426,60 +443,98 @@ function Market({ sold, trades, onOpen }: { sold: string[]; trades: Record<strin
   );
 }
 
-function ListingChat({ listing, trade, money, sold, onText, onOffer, onCounter, onDeal }: {
-  listing: Listing; trade: Trade; money: number; sold: boolean;
-  onText: (t: string) => void; onOffer: (n: number) => void; onCounter: (a: boolean) => void; onDeal: () => void;
+function Detail({ listing, sold, onMsg, onOffer }: { listing: Listing; sold: boolean; onMsg: () => void; onOffer: () => void }) {
+  const s = listing.seller, w = listing.weapon;
+  return (
+    <main className="screen space-y-4">
+      <div className="panel burst overflow-hidden">
+        <div className="halftone relative flex h-36 items-center justify-center bg-crimson">
+          <span className="font-display text-5xl text-paper drop-shadow-[4px_4px_0_var(--ink)]">{w.name}</span>
+          <span className={`chip rarity-${w.rarity} absolute left-3 top-3`}>{RARITY_LABEL[w.rarity]}</span>
+        </div>
+        <div className="grid grid-cols-3 text-center">
+          <div className="p-2"><div className="text-xs text-muted-foreground">HASAR</div><div className="font-display text-2xl text-gold">{w.dmg}</div></div>
+          <div className="border-x-2 border-border p-2"><div className="text-xs text-muted-foreground">DAYANIKLILIK</div><div className="font-display text-2xl text-gold">%{w.dur}</div></div>
+          <div className="p-2"><div className="text-xs text-muted-foreground">FİYAT</div><div className="font-display text-2xl text-gold">{fmt(listing.price)}</div></div>
+        </div>
+        <div className="space-y-1 border-t-2 border-border p-3 text-sm">
+          <div className="flex justify-between"><span className="text-muted-foreground">Hasar gücü</span><div className="bar w-1/2"><div style={{ width: `${w.dmg}%` }} /></div></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Dayanıklılık</span><div className="bar w-1/2"><div style={{ width: `${w.dur}%` }} /></div></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Konum</span><b>{listing.city}</b></div>
+        </div>
+      </div>
+      <div className="panel flex gap-3 p-3">
+        <img src={s.img} alt={s.name} className="portrait h-20 w-20 shrink-0" />
+        <div className="min-w-0 flex-1 text-sm">
+          <div className="font-display truncate text-xl text-paper">{s.name}</div>
+          <div className="text-success">● Çevrimiçi</div>
+          <div className="text-muted-foreground">{s.gang} · üye: {s.since}</div>
+          <div>★ {s.rep} itibar · {s.trades} ticaret · ⭐ {s.rating}</div>
+        </div>
+      </div>
+      <p className="text-center text-xs text-muted-foreground">Tüm eşyalar ve para kurgusal oyun içi değerlerdir.</p>
+      {sold ? <div className="caption w-full text-center">BU SİLAH SENİN — KARGODA</div> : (
+        <div className="grid grid-cols-2 gap-3">
+          <button className="btn-comic btn-dark !py-4" onClick={onMsg}>💬 MESAJ GÖNDER</button>
+          <button className="btn-comic btn-red !py-4" onClick={onOffer}>💰 TEKLİF GÖNDER</button>
+        </div>
+      )}
+    </main>
+  );
+}
+
+function ListingChat({ listing, trade, money, sold, focusOffer, onText, onOffer, onCounter, onAccept, onDeal }: {
+  listing: Listing; trade: Trade; money: number; sold: boolean; focusOffer: boolean;
+  onText: (t: string) => void; onOffer: (n: number) => void; onCounter: (a: boolean) => void; onAccept: (n: number) => void; onDeal: () => void;
 }) {
   const [text, setText] = useState("");
   const [offer, setOffer] = useState(String(Math.round(listing.price * 0.8)));
   const endRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [trade.msgs.length]);
+  const offerRef = useRef<HTMLInputElement>(null);
+  const msgRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { (focusOffer ? offerRef : msgRef).current?.focus(); }, [focusOffer]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [trade.msgs.length, trade.status]);
   const send = () => { const t = text.trim(); if (!t) return; onText(t); setText(""); };
   const offerNum = parseInt(offer.replace(/\D/g, ""), 10) || 0;
+  const askPrice = trade.status === "counter" && trade.counter ? trade.counter : listing.price;
+  const busy = trade.status === "pending";
 
   return (
     <main className="relative z-[1] flex min-h-0 flex-1 flex-col">
-      <div className="space-y-2 p-3 pb-0">
-        <div className="panel flex items-center gap-3 p-2">
-          <img src={listing.seller.img} alt={listing.seller.name} className="portrait h-14 w-14 shrink-0" />
-          <div className="min-w-0 flex-1 text-sm">
-            <div className="font-display truncate text-lg text-paper">{listing.seller.name} <span className="text-success text-xs">● çevrimiçi</span></div>
-            <div className="truncate text-muted-foreground">{listing.seller.gang} · üye: {listing.seller.since}</div>
-            <div className="truncate">★ {listing.seller.rep} itibar · {listing.seller.trades} ticaret · ⭐ {listing.seller.rating}</div>
-          </div>
-        </div>
-        <WeaponCard w={listing.weapon} extra={<div className="mt-1 flex justify-between text-sm"><span>Konum: {listing.city}</span><span className="font-display text-xl text-gold">{fmt(listing.price)}</span></div>} />
+      <div className="flex items-center gap-2 border-b-2 border-border bg-card p-2">
+        <img src={listing.seller.img} alt={listing.seller.name} className="portrait h-11 w-11 shrink-0 !border-2" />
+        <div className="min-w-0 flex-1 text-sm"><div className="font-display truncate text-paper">{listing.seller.name} <span className="text-xs text-success">●</span></div><div className="truncate text-muted-foreground">{listing.weapon.name} · ilan {fmt(listing.price)}</div></div>
+        <span className="chip">İSTENEN {fmt(askPrice)}</span>
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto p-3">
         {trade.msgs.map((m, i) => (
           <div key={i} className={`bubble burst bubble-${m.from}`}>{m.text}</div>
         ))}
-        {trade.status === "pending" && <div className="bubble bubble-them w-fit opacity-70">yazıyor…</div>}
+        {busy && <div className="bubble bubble-them w-fit opacity-70">yazıyor…</div>}
         <div ref={endRef} />
       </div>
 
-      <div className="space-y-2 border-t-3 border-gold bg-ink p-3 pb-[calc(env(safe-area-inset-bottom)+12px)]">
+      <div className="space-y-2 border-t-3 border-gold bg-ink p-3">
         {sold ? (
-          <div className="text-center font-display text-gold">BU SİLAH SENİN. LİMAN'DA TAKİP ET.</div>
+          <div className="text-center font-display text-gold">BU SİLAH SENİN. KARGODA TAKİP ET.</div>
         ) : trade.status === "deal" ? (
-          <button className="btn-comic btn-green w-full burst" onClick={onDeal}>GÜVENLİ İŞLEME GEÇ ▶</button>
-        ) : trade.status === "counter" ? (
-          <div className="grid grid-cols-2 gap-2">
-            <button className="btn-comic btn-green" onClick={() => onCounter(true)}>KABUL {fmt(trade.counter!)}</button>
-            <button className="btn-comic btn-red" onClick={() => onCounter(false)}>REDDET</button>
-          </div>
+          <button className="btn-comic btn-green w-full burst !py-4" onClick={onDeal}>📜 TİCARET SÖZLEŞMESİNİ AÇ ▶</button>
         ) : (
-          <div className="flex gap-2">
-            <input className="field min-w-0 flex-1" inputMode="numeric" value={offer} onChange={(e) => setOffer(e.target.value)} aria-label="Teklif tutarı" />
-            <button className="btn-comic btn-red shrink-0 !px-3 !text-base" disabled={trade.status === "pending" || offerNum <= 0} onClick={() => onOffer(offerNum)}>TEKLİF GÖNDER</button>
-          </div>
-        )}
-        {!sold && trade.status !== "deal" && trade.status !== "counter" && (
-          <div className="text-xs text-muted-foreground">Kasan: {fmt(money)} · Satıcı kabul, red veya karşı teklif yapabilir.</div>
+          <>
+            <div className="flex gap-2">
+              <input ref={offerRef} className="field min-w-0 flex-1" inputMode="numeric" value={offer} onChange={(e) => setOffer(e.target.value)} aria-label="Teklif tutarı" />
+              <button className="btn-comic btn-red shrink-0 !px-3 !text-base" disabled={busy || offerNum <= 0} onClick={() => onOffer(offerNum)}>TEKLİF GÖNDER</button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button className="btn-comic btn-green !py-2 !text-base" disabled={busy || askPrice > money} onClick={() => (trade.status === "counter" ? onCounter(true) : onAccept(listing.price))}>KABUL ET {fmt(askPrice)}</button>
+              <button className="btn-comic btn-dark !py-2 !text-base" disabled={busy || trade.status !== "counter"} onClick={() => onCounter(false)}>REDDET</button>
+            </div>
+            <div className="text-xs text-muted-foreground">Kasan: {fmt(money)} · Satıcı kabul, red ya da karşı teklif yapabilir.</div>
+          </>
         )}
         <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); send(); }}>
-          <input className="field min-w-0 flex-1" placeholder="Mesaj yaz…" value={text} onChange={(e) => setText(e.target.value)} aria-label="Mesaj" />
+          <input ref={msgRef} className="field min-w-0 flex-1" placeholder="Satıcıya mesaj yaz…" value={text} onChange={(e) => setText(e.target.value)} aria-label="Mesaj" enterKeyHint="send" />
           <button type="submit" className="btn-comic shrink-0 !px-4 !text-base">GÖNDER</button>
         </form>
       </div>
@@ -490,20 +545,25 @@ function ListingChat({ listing, trade, money, sold, onText, onOffer, onCounter, 
 function Escrow({ listing, price, onConfirm }: { listing: Listing; price: number; onConfirm: () => void }) {
   return (
     <main className="screen space-y-4">
-      <span className="caption">Güvenli İşlem</span>
-      <div className="panel burst p-4 text-center">
-        <div className="text-5xl">🔒</div>
-        <div className="font-display mt-2 text-2xl text-paper">ÖDEME EMANETTE TUTULACAK</div>
-        <p className="mt-2 text-muted-foreground">{fmt(price)} kasandan çekilir ve silah limana ulaşıp sen teslim alana kadar Underworld emanetinde bekler. Satıcı parayı ancak teslimattan sonra alır.</p>
+      <div className="panel burst bg-paper p-4 text-ink">
+        <div className="text-center font-display text-3xl">📜 TİCARET SÖZLEŞMESİ</div>
+        <div className="text-center text-sm">No. UW-{listing.id.toUpperCase()}-{price}</div>
+        <div className="my-3 border-t-2 border-dashed border-ink" />
+        <div className="space-y-1.5 text-base">
+          <div className="flex justify-between"><span>Alıcı</span><b>Gölge</b></div>
+          <div className="flex justify-between"><span>Satıcı</span><b>{listing.seller.name}</b></div>
+          <div className="flex justify-between"><span>Eşya</span><b>{listing.weapon.name}</b></div>
+          <div className="flex justify-between"><span>Nadirlik / Hasar</span><b>{RARITY_LABEL[listing.weapon.rarity]} / {listing.weapon.dmg}</b></div>
+          <div className="flex justify-between"><span>Rota</span><b>{listing.city} → Atina</b></div>
+          <div className="flex justify-between"><span>Anlaşılan fiyat</span><b>{fmt(price)}</b></div>
+          <div className="flex justify-between"><span>Üretim teslim süresi</span><b>{fmtDur(realDeliveryMin(price))}</b></div>
+          <div className="flex justify-between"><span>Prototip süresi</span><b>{demoDeliverySec(price)} sn</b></div>
+        </div>
+        <div className="my-3 border-t-2 border-dashed border-ink" />
+        <p className="text-sm">🔒 Güvenli işlem: ödeme emanette tutulur, satıcıya ancak teslimattan sonra aktarılır. Tüm değerler kurgusal oyun içi paradır.</p>
+        <div className="mt-3 flex justify-between font-display text-lg"><span>✍ Gölge</span><span>✍ {listing.seller.name}</span></div>
       </div>
-      <WeaponCard w={listing.weapon} />
-      <div className="panel space-y-2 p-3">
-        <div className="flex justify-between"><span>Satıcı</span><b>{listing.seller.name}</b></div>
-        <div className="flex justify-between"><span>Rota</span><b>{listing.city} → İstanbul</b></div>
-        <div className="flex justify-between"><span>Anlaşılan fiyat</span><b className="text-gold">{fmt(price)}</b></div>
-        <div className="flex justify-between text-sm text-muted-foreground"><span>Tahmini süre</span><span>{fmtDur(realDeliveryMin(price))} (demo: {demoDeliverySec(price)} sn)</span></div>
-      </div>
-      <button className="btn-comic btn-green w-full" onClick={onConfirm}>ÖDEMEYİ ONAYLA & KARGOYA VER</button>
+      <button className="btn-comic btn-green w-full !py-4" onClick={onConfirm}>SÖZLEŞMEYİ İMZALA & KARGOYA VER ▶</button>
     </main>
   );
 }
@@ -511,46 +571,88 @@ function Escrow({ listing, price, onConfirm }: { listing: Listing; price: number
 function Port({ shipments, now, onClaim, go }: { shipments: Shipment[]; now: number; onClaim: (s: Shipment) => void; go: (s: Screen) => void }) {
   return (
     <main className="screen space-y-4">
-      <span className="caption">Liman — Kargo Takibi</span>
-      <p className="text-sm text-muted-foreground">Gerçek sistemde teslimat eşya değerine göre 5 dk – 24 saat sürer. Prototipte süre hızlandırıldı.</p>
+      <span className="caption">Kargo Takibi</span>
+      <p className="text-sm text-muted-foreground">Üretim tasarımı: teslimat eşya değerine göre 5 dk – 24 saat. Prototipte süre test için hızlandırıldı.</p>
       {shipments.length === 0 && (
         <div className="panel p-4 text-center">
           <div className="text-4xl">⚓</div>
-          <p className="mt-2">Limanda bekleyen kargon yok.</p>
+          <p className="mt-2">Yolda kargon yok.</p>
           <button className="btn-comic btn-red mt-3" onClick={() => go("market")}>KARA BORSA'YA GİT</button>
         </div>
       )}
       {shipments.map((s) => {
         const p = Math.min(1, (now - s.start) / s.duration);
-        const step = Math.min(STEPS.length - 1, Math.floor(p * STEPS.length));
+        const step = p >= 1 ? STEPS.length - 1 : Math.min(STEPS.length - 2, Math.floor(p * (STEPS.length - 1)));
         const left = Math.max(0, Math.ceil((s.duration - (now - s.start)) / 1000));
         const done = p >= 1;
+        const bx = 40 + p * 240, by = 70 - Math.sin(p * Math.PI) * 45;
         return (
           <div key={s.id} className="panel space-y-3 p-3">
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0"><div className="font-display truncate text-xl text-paper">🚢 {s.ship}</div><div className="text-sm">{s.from} → {s.to}</div></div>
-              <span className="chip">{s.claimed ? "TESLİM ALINDI" : done ? "HAZIR" : `${String(Math.floor(left / 60)).padStart(2, "0")}:${String(left % 60).padStart(2, "0")}`}</span>
+              <div className="min-w-0"><div className="font-display truncate text-2xl text-paper">🚢 {s.ship}</div><div className="text-sm">{s.from.toLocaleUpperCase("tr-TR")} → {s.to.toLocaleUpperCase("tr-TR")}</div></div>
+              <span className="chip !text-xl">{s.claimed ? "ALINDI" : done ? "HAZIR" : `${String(Math.floor(left / 60)).padStart(2, "0")}:${String(left % 60).padStart(2, "0")}`}</span>
             </div>
+            <svg viewBox="0 0 320 100" className="halftone w-full border-2 border-ink bg-muted" role="img" aria-label="Rota haritası">
+              <path d="M40 70 Q160 -20 280 70" fill="none" stroke="var(--gold)" strokeWidth="2" strokeDasharray="6 5" />
+              <path d="M40 70 Q160 -20 280 70" fill="none" stroke="var(--destructive)" strokeWidth="3" pathLength={1} strokeDasharray={`${p} 1`} />
+              <circle cx="40" cy="70" r="6" fill="var(--gold)" stroke="var(--ink)" strokeWidth="2" />
+              <circle cx="280" cy="70" r="6" fill={done ? "var(--success)" : "var(--paper)"} stroke="var(--ink)" strokeWidth="2" />
+              <text x="40" y="92" textAnchor="middle" fill="var(--paper)" fontSize="11" fontFamily="Anton">{s.from.toLocaleUpperCase("tr-TR")}</text>
+              <text x="280" y="92" textAnchor="middle" fill="var(--paper)" fontSize="11" fontFamily="Anton">{s.to.toLocaleUpperCase("tr-TR")}</text>
+              <text x="160" y="96" textAnchor="middle" fill="var(--muted-foreground)" fontSize="9">KARADENİZ · EGE</text>
+              <g transform={`translate(${bx - 9} ${by - 9})`}><rect width="18" height="10" y="5" rx="2" fill="var(--crimson)" stroke="var(--ink)" strokeWidth="1.5" /><rect x="6" width="6" height="6" fill="var(--paper)" stroke="var(--ink)" /></g>
+            </svg>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="border-2 border-border p-1.5"><div className="text-muted-foreground">KALKIŞ · {s.from}</div><b>{fmtClock(s.start)}</b></div>
               <div className="border-2 border-border p-1.5 text-right"><div className="text-muted-foreground">VARIŞ · {s.to}</div><b>{fmtClock(s.start + s.duration)}</b></div>
-              <div className="col-span-2 text-muted-foreground">Gerçek teslimat süresi: {fmtDur(realDeliveryMin(s.price))}</div>
+              <div className="col-span-2 text-muted-foreground">Üretimde bu eşya için teslim süresi: {fmtDur(realDeliveryMin(s.price))}</div>
             </div>
-            <div className="relative h-8 overflow-hidden border-2 border-ink bg-muted">
-              <div className="absolute inset-y-0 left-0 bg-crimson/60 transition-all duration-500" style={{ width: `${p * 100}%` }} />
-              <span className="absolute top-0.5 text-xl transition-all duration-500" style={{ left: `calc(${p * 100}% - ${p * 28}px)` }}>🚢</span>
-            </div>
-            <ol className="space-y-1 text-sm">
+            <ol className="space-y-1.5">
               {STEPS.map((st, i) => (
-                <li key={st} className={i <= step || done ? "text-gold" : "text-muted-foreground"}>{i < step || done ? "✔" : i === step ? "●" : "○"} {st}</li>
+                <li key={st} className={`flex items-center gap-2 ${i <= step ? "text-gold" : "text-muted-foreground"}`}>
+                  <span className={`grid h-6 w-6 place-items-center border-2 text-xs ${i < step || done ? "border-gold bg-gold text-ink" : i === step ? "border-destructive" : "border-border"}`}>{i < step || done ? "✔" : i + 1}</span>{st}
+                </li>
               ))}
             </ol>
             <div className="text-sm">Kargo: <b>{s.weapon.name}</b> · {fmt(s.price)}</div>
-            {done && !s.claimed && <button className="btn-comic btn-green w-full burst" onClick={() => onClaim(s)}>TESLİM AL</button>}
-            {s.claimed && <button className="btn-comic btn-dark w-full" onClick={() => go("crew")}>EKİBE KUŞANDIR ▶</button>}
+            {done && !s.claimed && <button className="btn-comic btn-green w-full burst !py-4" onClick={() => onClaim(s)}>📦 TESLİM AL → ENVANTER</button>}
+            {s.claimed && <button className="btn-comic btn-dark w-full" onClick={() => go("inventory")}>ENVANTERE GİT ▶</button>}
           </div>
         );
       })}
+    </main>
+  );
+}
+
+function Inventory({ inventory, crew, highlight, onEquip, go }: { inventory: Weapon[]; crew: Member[]; highlight: string | null; onEquip: (m: string, w: string | null) => void; go: (s: Screen) => void }) {
+  const [picking, setPicking] = useState<string | null>(null);
+  return (
+    <main className="screen space-y-4">
+      {highlight && <div className="bubble bubble-sys burst !text-base">📦 TESLİM EDİLDİ! Yeni silahın envanterde.</div>}
+      {[...inventory].reverse().map((w) => {
+        const owner = crew.find((m) => m.weaponUid === w.uid);
+        return (
+          <WeaponCard key={w.uid} w={w} extra={
+            <div className={`mt-3 space-y-2 border-t-2 border-dashed border-border pt-2 ${w.uid === highlight ? "burst" : ""}`}>
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <span>{owner ? <>Kuşanan: <b className="text-gold">{owner.name.split(" —")[0]}</b></> : "Kimse kuşanmadı"}</span>
+                <button className="btn-comic btn-red !px-4 !py-2 !text-base" onClick={() => setPicking(picking === w.uid ? null : w.uid)}>KUŞAN</button>
+              </div>
+              {picking === w.uid && (
+                <div className="grid grid-cols-3 gap-2">
+                  {crew.map((m) => (
+                    <button key={m.id} className={`panel p-1 text-center ${m.weaponUid === w.uid ? "panel-red" : ""}`} onClick={() => { onEquip(m.id, w.uid); setPicking(null); }}>
+                      <img src={m.img} alt={m.name} loading="lazy" className="portrait aspect-square w-full !border-2" />
+                      <div className="truncate text-xs font-bold">{m.name.split(" —")[0]}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          } />
+        );
+      })}
+      <button className="btn-comic w-full !py-4" onClick={() => go("city")}>🏚️ SAFEHOUSE'A DÖN</button>
     </main>
   );
 }
