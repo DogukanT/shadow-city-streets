@@ -3,6 +3,7 @@ import hero from "@/assets/hero.jpg";
 import boss from "@/assets/boss.jpg";
 import dealer from "@/assets/dealer.jpg";
 import enforcer from "@/assets/enforcer.jpg";
+import cityImg from "@/assets/city.jpg";
 
 /* ---------- Types & data ---------- */
 type Rarity = "common" | "rare" | "epic" | "legend";
@@ -14,7 +15,7 @@ type Msg = { from: "me" | "them" | "sys"; text: string; offer?: number };
 type Trade = { listingId: string; msgs: Msg[]; status: "open" | "pending" | "counter" | "deal" | "rejected"; myOffer?: number; counter?: number; final?: number; rounds: number };
 type Shipment = { id: string; weapon: Weapon; ship: string; from: string; to: string; start: number; duration: number; price: number; claimed: boolean };
 type Member = { id: string; name: string; role: string; img: string; weaponUid: string | null; power: number };
-type Screen = "intro" | "city" | "hq" | "market" | "listing" | "escrow" | "port" | "war" | "crew" | "rank";
+type Screen = "intro" | "city" | "hq" | "market" | "listing" | "escrow" | "port" | "war" | "crew" | "rank" | "story" | "gang";
 
 const SELLERS: [Seller, Seller, Seller] = [
   { name: "Kel Vito", img: dealer, rep: 340, mood: "tough" },
@@ -70,6 +71,8 @@ export default function Game() {
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const [toast, setToast] = useState("");
+  const [storyNode, setStoryNode] = useState("s0");
+  const [gangVault, setGangVault] = useState(4200);
 
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(t); }, []);
   const flash = (t: string) => { setToast(t); window.setTimeout(() => setToast(""), 2200); };
@@ -153,12 +156,12 @@ export default function Game() {
       <div className="app-frame">
         {screen !== "intro" && (
           <header className="topbar">
-            {screen !== "city" ? (
-              <button className="btn-comic btn-dark !px-3 !py-1 !text-sm" onClick={() => go(screen === "listing" ? "market" : screen === "escrow" ? "listing" : "city")}>◀ GERİ</button>
+            {screen === "listing" || screen === "escrow" ? (
+              <button className="btn-comic btn-dark !px-3 !py-1 !text-sm" onClick={() => go(screen === "listing" ? "market" : "listing")}>◀ GERİ</button>
             ) : (
-              <span className="font-display text-lg text-gold">UNDERWORLD</span>
+              <span className="font-display truncate text-lg text-gold">{TITLES[screen]}</span>
             )}
-            <div className="ml-auto flex min-w-0 gap-2">
+            <div className="ml-auto flex shrink-0 gap-2">
               <span className="chip">{fmt(money)}</span>
               <span className="chip">★ {rep}</span>
             </div>
@@ -167,6 +170,8 @@ export default function Game() {
 
         {screen === "intro" && <Intro onPlay={() => go("city")} />}
         {screen === "city" && <City go={go} readyShip={readyShip} activeShips={shipments.filter((s) => !s.claimed).length} />}
+        {screen === "story" && <Story node={storyNode} setNode={setStoryNode} onEffect={(dm, dr) => { setMoney((m) => m + dm); setRep((r) => r + dr); }} go={go} />}
+        {screen === "gang" && <Gang money={money} rep={rep} crew={crew} onDonate={(n) => { if (n > money) return flash("Yeterli paran yok"); setMoney((m) => m - n); setGangVault((v) => v + n); setRep((r) => r + Math.round(n / 100)); flash(`Çete kasasına ${fmt(n)} (+${Math.round(n / 100)} itibar)`); }} vault={gangVault} />}
         {screen === "hq" && <HQ money={money} rep={rep} held={heldMoney} crew={crew} inventory={inventory} power={crewPower} go={go} />}
         {screen === "market" && <Market sold={soldIds} trades={trades} onOpen={openListing} />}
         {screen === "listing" && listing && trade && (
@@ -179,6 +184,7 @@ export default function Game() {
         {screen === "war" && <War crew={crew} inventory={inventory} power={crewPower} />}
         {screen === "rank" && <Rank rep={rep} power={crewPower} />}
 
+        {screen !== "intro" && <BottomNav screen={screen} go={go} alert={readyShip} />}
         {toast && <div className="caption burst absolute left-1/2 top-24 z-50 -translate-x-1/2 whitespace-nowrap !text-base">{toast}</div>}
       </div>
     </div>
@@ -201,32 +207,142 @@ function Intro({ onPlay }: { onPlay: () => void }) {
   );
 }
 
-const DISTRICTS: { id: Screen; name: string; icon: string; desc: string; red?: boolean }[] = [
-  { id: "hq", name: "KARARGÂH", icon: "🏛️", desc: "Patron, ekip, kasa" },
-  { id: "market", name: "KARA BORSA", icon: "💼", desc: "Oyuncu silah pazarı", red: true },
-  { id: "port", name: "LİMAN", icon: "⚓", desc: "Kargo & teslimat" },
-  { id: "war", name: "BÖLGE SAVAŞI", icon: "⚔️", desc: "3v3 PvP", red: true },
-  { id: "crew", name: "EKİP", icon: "🕴️", desc: "Silah kuşan" },
-  { id: "rank", name: "SIRALAMA", icon: "👑", desc: "Şehrin en iyileri" },
+const TITLES: Record<Screen, string> = {
+  intro: "", city: "ŞEHİR", hq: "KARARGÂH", market: "KARA BORSA", listing: "İLAN", escrow: "SÖZLEŞME",
+  port: "KARGO", war: "REKABET", crew: "EKİP", rank: "SIRALAMA", story: "HİKÂYE", gang: "ÇETE",
+};
+const NAV: { id: Screen; icon: string; label: string }[] = [
+  { id: "city", icon: "🏙️", label: "Şehir" }, { id: "story", icon: "📖", label: "Hikâye" },
+  { id: "market", icon: "💼", label: "Borsa" }, { id: "port", icon: "⚓", label: "Kargo" },
+  { id: "crew", icon: "🕴️", label: "Ekip" }, { id: "gang", icon: "🃏", label: "Çete" },
+  { id: "war", icon: "⚔️", label: "Rekabet" }, { id: "rank", icon: "👑", label: "Sıra" },
+];
+function BottomNav({ screen, go, alert }: { screen: Screen; go: (s: Screen) => void; alert: boolean }) {
+  const active = screen === "listing" || screen === "escrow" ? "market" : screen === "hq" ? "city" : screen;
+  return (
+    <nav className="bottom-nav" aria-label="Ana menü">
+      {NAV.map((n) => (
+        <button key={n.id} className={`nav-item ${active === n.id ? "nav-active" : ""}`} onClick={() => go(n.id)} aria-label={n.label}>
+          <span className="relative text-xl leading-none">{n.icon}{n.id === "port" && alert && <span className="nav-dot" />}</span>
+          <span>{n.label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+type Hot = { x: number; y: number; label: string; to: Screen; npc?: { img: string; line: string } };
+const HOTSPOTS: Hot[] = [
+  { x: 14, y: 22, label: "KARA BORSA", to: "market" },
+  { x: 50, y: 40, label: "KARARGÂH", to: "hq" },
+  { x: 84, y: 50, label: "LİMAN", to: "port" },
+  { x: 8, y: 66, label: "Kapıcı Bruno", to: "story", npc: { img: dealer, line: "Patron seni soruyordu. Limanda bir iş var…" } },
+  { x: 34, y: 58, label: "Çete Toplantısı", to: "gang", npc: { img: enforcer, line: "Aile kasası boşalıyor. Katkı lazım." } },
+  { x: 92, y: 66, label: "Vera'nın Adamı", to: "war", npc: { img: boss, line: "Liman bölgesi bizim. Gücün yeter mi?" } },
 ];
 function City({ go, readyShip, activeShips }: { go: (s: Screen) => void; readyShip: boolean; activeShips: number }) {
+  const [npc, setNpc] = useState<Hot | null>(null);
   return (
-    <main className="screen">
-      <div className="panel mb-4 flex items-center gap-3 p-3">
-        <img src={boss} alt="Patron" className="portrait h-16 w-16 shrink-0" />
-        <div className="bubble bubble-them !max-w-none flex-1 !text-base">Şehir bizim olacak. Önce Kara Borsa'dan sağlam bir silah bul.</div>
+    <main className="screen !p-0">
+      <div className="relative w-full overflow-hidden border-b-4 border-ink" style={{ aspectRatio: "768 / 1152", maxHeight: "calc(100% - 4px)" }}>
+        <img src={cityImg} alt="Gece noir şehir sokağı, bar, konak ve liman" width={768} height={1152} className="absolute inset-0 h-full w-full object-cover" />
+        <span className="caption absolute left-3 top-3 z-[2]">Gece yarısı · Gölge Sokağı</span>
+        {HOTSPOTS.map((h) => (
+          <button key={h.label} className={`hotspot ${h.npc ? "hotspot-npc" : ""}`} style={{ left: `${h.x}%`, top: `${h.y}%` }}
+            onClick={() => (h.npc ? setNpc(h) : go(h.to))} aria-label={h.label}>
+            <span className="hotspot-ring" />
+            <span className="hotspot-label">{h.label}{h.to === "port" && activeShips > 0 ? (readyShip ? " · HAZIR!" : ` · ${activeShips}`) : ""}</span>
+          </button>
+        ))}
+        <div className="absolute inset-x-3 bottom-3 z-[3] flex items-end gap-2">
+          <img src={boss} alt="Senin karakterin Gölge" className="portrait h-20 w-20 shrink-0" />
+          <div className="bubble bubble-them burst !max-w-none flex-1 !text-base">
+            {npc ? <><b>{npc.label}:</b> {npc.npc!.line}</> : "Bu şehir bir gün benim olacak. Önce Kara Borsa'dan sağlam bir silah lazım."}
+          </div>
+        </div>
       </div>
-      <span className="caption mb-3">Şehir Merkezi</span>
-      <div className="mt-3 grid grid-cols-2 gap-4">
-        {DISTRICTS.map((d) => (
-          <button key={d.id} className={`panel district ${d.red ? "panel-red" : ""}`} onClick={() => go(d.id)}>
-            <span className="district-icon">{d.icon}</span>
-            <span className="font-display text-xl text-paper">{d.name}</span>
-            <span className="text-sm text-muted-foreground">{d.desc}</span>
-            {d.id === "port" && activeShips > 0 && <span className={`chip mt-1 w-fit ${readyShip ? "burst" : ""}`}>{readyShip ? "TESLİMAT HAZIR!" : `${activeShips} kargo yolda`}</span>}
+      {npc && (
+        <div className="flex gap-2 p-3">
+          <img src={npc.npc!.img} alt={npc.label} className="portrait h-14 w-14 shrink-0" />
+          <button className="btn-comic btn-red flex-1" onClick={() => go(npc.to)}>{npc.to === "story" ? "HİKÂYEYE GİR" : npc.to === "gang" ? "ÇETEYE GİT" : "REKABETE BAK"} ▶</button>
+          <button className="btn-comic btn-dark" onClick={() => setNpc(null)}>✕</button>
+        </div>
+      )}
+    </main>
+  );
+}
+
+type StoryNode = { speaker: string; img: string; text: string; choices: { label: string; next: string; dm?: number; dr?: number; go?: Screen }[] };
+const STORY: Record<string, StoryNode> = {
+  s0: { speaker: "Kel Vito", img: dealer, text: "Gölge… Limandan bir sevkiyat kayboldu. Don Rıza parmağını sana uzatıyor.", choices: [
+    { label: "Ben hallederim.", next: "s1", dr: 10 }, { label: "Bu benim sorunum değil.", next: "s2", dr: -5 }] },
+  s2: { speaker: "Don Rıza", img: boss, text: "Bu şehirde herkesin sorunu benim sorunumdur evlat. Ve artık seninki de.", choices: [
+    { label: "Peki Don. Bakarım.", next: "s1" }] },
+  s1: { speaker: "Kızıl Leyla", img: enforcer, text: "Malları Vera Mortis'in adamları çaldı. Rüşvet mi verelim, yoksa kapılarını mı kıralım?", choices: [
+    { label: "Rüşvet ver ($1.000)", next: "s3", dm: -1000, dr: 5 }, { label: "Tehdit et", next: "s4", dr: 20 }] },
+  s3: { speaker: "Vera'nın Muhasebecisi", img: dealer, text: "Para her dili konuşur. Mallar Kara Borsa'ya düştü bile — git kendi silahını al.", choices: [
+    { label: "Kara Borsa'ya git", next: "s5", go: "market" }] },
+  s4: { speaker: "Vera Mortis", img: enforcer, text: "Cesursun. Ama cesaret mermi geçirmez. Liman için rekabette görüşeceğiz.", choices: [
+    { label: "Ekibimi hazırlayacağım", next: "s5", go: "war" }] },
+  s5: { speaker: "Anlatıcı", img: boss, text: "BÖLÜM I SONU. Şehir uyumaz… yeni bölüm yakında.", choices: [
+    { label: "Bölümü baştan oyna", next: "s0" }] },
+};
+function Story({ node, setNode, onEffect, go }: { node: string; setNode: (n: string) => void; onEffect: (dm: number, dr: number) => void; go: (s: Screen) => void }) {
+  const n = STORY[node] ?? STORY.s0!;
+  return (
+    <main className="screen space-y-4">
+      <span className="caption">Bölüm I — Kayıp Sevkiyat</span>
+      <div key={node} className="panel burst overflow-hidden">
+        <div className="relative">
+          <img src={n.img} alt={n.speaker} className="aspect-[4/3] w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-ink to-transparent" />
+          <span className="caption absolute bottom-3 left-3">{n.speaker}</span>
+        </div>
+        <div className="p-3"><div className="bubble bubble-them !max-w-none !text-lg">{n.text}</div></div>
+      </div>
+      <div className="space-y-3">
+        {n.choices.map((c) => (
+          <button key={c.label} className="btn-comic w-full text-left" onClick={() => {
+            if ((c.dm ?? 0) || (c.dr ?? 0)) onEffect(c.dm ?? 0, c.dr ?? 0);
+            setNode(c.next); if (c.go) go(c.go);
+          }}>
+            ▶ {c.label}
+            {(c.dm || c.dr) ? <span className="ml-2 text-sm opacity-70">{c.dm ? fmt(c.dm) : ""} {c.dr ? `${c.dr > 0 ? "+" : ""}${c.dr}★` : ""}</span> : null}
           </button>
         ))}
       </div>
+    </main>
+  );
+}
+
+function Gang({ money, rep, crew, vault, onDonate }: { money: number; rep: number; crew: Member[]; vault: number; onDonate: (n: number) => void }) {
+  const level = 1 + Math.floor(vault / 5000);
+  const territories = [
+    { name: "Gölge Sokağı", owner: "Gölge Ailesi", mine: true },
+    { name: "Liman Bölgesi", owner: "Vera Mortis", mine: false },
+    { name: "Eski Çarşı", owner: level >= 2 ? "Gölge Ailesi" : "Sahipsiz", mine: level >= 2 },
+  ];
+  return (
+    <main className="screen space-y-4">
+      <div className="panel panel-red p-4 text-center">
+        <div className="text-4xl">🃏</div>
+        <div className="font-display text-3xl text-paper">GÖLGE AİLESİ</div>
+        <div className="text-sm">Seviye {level} · Kasa {fmt(vault)} · Sonraki seviye {fmt(level * 5000)}</div>
+        <div className="bar mt-2"><div style={{ width: `${((vault % 5000) / 5000) * 100}%` }} /></div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <button className="btn-comic" disabled={money < 500} onClick={() => onDonate(500)}>BAĞIŞ $500</button>
+        <button className="btn-comic btn-red" disabled={money < 2000} onClick={() => onDonate(2000)}>BAĞIŞ $2.000</button>
+      </div>
+      <div className="font-display text-lg text-gold">BÖLGELER</div>
+      {territories.map((t) => (
+        <div key={t.name} className="panel flex items-center justify-between p-3">
+          <span className="font-semibold">{t.name}</span>
+          <span className={`chip ${t.mine ? "" : "!border-crimson !text-paper"}`}>{t.owner}</span>
+        </div>
+      ))}
+      <div className="font-display text-lg text-gold">ÜYELER · Senin itibarın ★ {rep}</div>
+      <div className="flex gap-3">{crew.map((m) => <img key={m.id} src={m.img} alt={m.name} loading="lazy" className="portrait h-16 w-16" />)}</div>
     </main>
   );
 }
@@ -448,31 +564,65 @@ function Crew({ crew, inventory, onEquip }: { crew: Member[]; inventory: Weapon[
 }
 
 const RIVALS = [{ name: "Kör Nazım", img: dealer }, { name: "Vera Mortis", img: enforcer }, { name: "Baron Kemal", img: boss }];
+const SFX = ["BAM!", "POW!", "KRAK!", "BANG!", "ZAP!"];
 function War({ crew, inventory, power }: { crew: Member[]; inventory: Weapon[]; power: number }) {
-  const [queued, setQueued] = useState(false);
+  const [hp, setHp] = useState<number[]>([100, 100, 100, 100, 100, 100]);
+  const [hit, setHit] = useState<{ idx: number; sfx: string } | null>(null);
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const timer = useRef<number | null>(null);
+  useEffect(() => () => { if (timer.current) window.clearInterval(timer.current); }, []);
+  const RIVAL_POWER = 210;
+  const start = () => {
+    setHp([100, 100, 100, 100, 100, 100]); setResult(null); setRunning(true);
+    let beat = 0;
+    const myBias = power / (power + RIVAL_POWER);
+    timer.current = window.setInterval(() => {
+      beat++;
+      setHp((cur) => {
+        const next = [...cur];
+        const iAttack = Math.random() < myBias;
+        const pool = (iAttack ? [3, 4, 5] : [0, 1, 2]).filter((i) => (next[i] ?? 0) > 0);
+        const target = pool[Math.floor(Math.random() * pool.length)];
+        if (target !== undefined) {
+          next[target] = Math.max(0, (next[target] ?? 0) - (25 + Math.floor(Math.random() * 25)));
+          setHit({ idx: target, sfx: SFX[Math.floor(Math.random() * SFX.length)] ?? "BAM!" });
+        }
+        const mine = next.slice(0, 3).reduce((a, b) => a + b, 0), theirs = next.slice(3).reduce((a, b) => a + b, 0);
+        if (beat >= 10 || mine === 0 || theirs === 0) {
+          if (timer.current) window.clearInterval(timer.current);
+          setRunning(false);
+          setResult(mine >= theirs ? "ZAFER! Liman bölgesi bu gecelik senin." : "YENİLGİ. Daha güçlü silahlar lazım.");
+        }
+        return next;
+      });
+    }, 650);
+  };
+  const Fighter = ({ img, name, sub, i, gray }: { img: string; name: string; sub: string; i: number; gray?: boolean }) => (
+    <div className={`panel relative flex items-center gap-2 p-1.5 ${hit?.idx === i ? "shake" : ""} ${(hp[i] ?? 0) === 0 ? "opacity-40 grayscale" : ""}`} key={`${i}-${hit?.idx === i ? hit.sfx : ""}`}>
+      <img src={img} alt={name} loading="lazy" className={`portrait h-12 w-12 shrink-0 !border-2 ${gray ? "grayscale" : ""}`} />
+      <div className="min-w-0 flex-1 text-xs">
+        <div className="truncate font-bold">{name}</div><div className="truncate text-gold">{sub}</div>
+        <div className="bar mt-1 !h-2 !border"><div className="!bg-crimson" style={{ width: `${hp[i]}%` }} /></div>
+      </div>
+      {hit?.idx === i && <span className="pow">{hit.sfx}</span>}
+    </div>
+  );
   return (
     <main className="screen space-y-4">
-      <span className="caption">Bölge Savaşı — 3v3</span>
       <div className="panel panel-red p-3 text-center">
-        <div className="font-display text-2xl text-paper">LİMAN BÖLGESİ İÇİN SAVAŞ</div>
+        <div className="font-display text-2xl text-paper">LİMAN BÖLGESİ · 3v3</div>
         <div className="text-sm">Kazanan ekip limanın kontrolünü ve haraç gelirini alır.</div>
       </div>
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-        <div className="space-y-2">{crew.map((m) => (
-          <div key={m.id} className="panel flex items-center gap-2 p-1.5">
-            <img src={m.img} alt={m.name} loading="lazy" className="portrait h-12 w-12 shrink-0 !border-2" />
-            <div className="min-w-0 text-xs"><div className="truncate font-bold">{m.name.split(" —")[0]}</div><div className="truncate text-gold">{inventory.find((w) => w.uid === m.weaponUid)?.name ?? "Silahsız"}</div></div>
-          </div>))}</div>
-        <div className="font-display burst text-5xl text-gold drop-shadow-[3px_3px_0_var(--crimson)]">VS</div>
-        <div className="space-y-2">{RIVALS.map((r) => (
-          <div key={r.name} className="panel flex items-center gap-2 p-1.5">
-            <img src={r.img} alt={r.name} loading="lazy" className="portrait h-12 w-12 shrink-0 !border-2 grayscale" />
-            <div className="min-w-0 text-xs"><div className="truncate font-bold">{r.name}</div><div className="text-muted-foreground">???</div></div>
-          </div>))}</div>
+        <div className="space-y-2">{crew.map((m, i) => <Fighter key={m.id} img={m.img} name={m.name.split(" —")[0] ?? m.name} sub={inventory.find((w) => w.uid === m.weaponUid)?.name ?? "Silahsız"} i={i} />)}</div>
+        <div className="font-display burst text-4xl text-gold drop-shadow-[3px_3px_0_var(--crimson)]">VS</div>
+        <div className="space-y-2">{RIVALS.map((r, i) => <Fighter key={r.name} img={r.img} name={r.name} sub="Vera'nın Çetesi" i={i + 3} gray />)}</div>
       </div>
-      <div className="panel p-3 text-center">Ekip gücün: <b className="font-display text-2xl text-gold">{power}</b> · Rakip: <b className="font-display text-2xl">~210</b></div>
-      <button className="btn-comic btn-red w-full" onClick={() => setQueued(true)}>{queued ? "SIRADA…" : "SAVAŞA KATIL"}</button>
-      {queued && <div className="bubble bubble-sys burst">Animasyonlu çizgi roman savaş sistemi bir sonraki sürümde (V0.3) geliyor. Silahlarını şimdiden topla!</div>}
+      <div className="panel p-3 text-center">Ekip gücün: <b className="font-display text-2xl text-gold">{power}</b> · Rakip: <b className="font-display text-2xl">{RIVAL_POWER}</b></div>
+      {result && <div className="bubble bubble-sys burst !text-lg">{result}</div>}
+      <button className="btn-comic btn-red w-full" disabled={running} onClick={start}>{running ? "ÇATIŞMA SÜRÜYOR…" : result ? "TEKRAR İZLE" : "SAVAŞ ÖNİZLEMESİ ▶"}</button>
+      <p className="text-center text-xs text-muted-foreground">Bu bir önizleme. Tam animasyonlu çizgi roman savaşı sonraki sürümde.</p>
     </main>
   );
 }

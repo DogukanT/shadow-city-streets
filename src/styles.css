@@ -220,3 +220,18 @@ body { font-family: var(--font-body); }
 }
 @keyframes panel-in { from { opacity: 0; transform: translateX(30px) skewX(-4deg); } to { opacity: 1; transform: none; } }
 @keyframes burst { 0% { transform: scale(.4) rotate(-8deg); opacity: 0; } 70% { transform: scale(1.1) rotate(2deg); } 100% { transform: none; opacity: 1; } }
+@layer components {
+  .bottom-nav { position: relative; z-index: 5; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); background: var(--ink); border-top: 3px solid var(--gold); padding: 6px 2px calc(env(safe-area-inset-bottom) + 6px); }
+  .nav-item { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 0; font-family: var(--font-display); font-size: 10px; color: var(--muted-foreground); letter-spacing: .02em; }
+  .nav-active { color: var(--gold); background: oklch(0.78 0.13 80 / 12%); box-shadow: inset 0 -3px 0 var(--crimson); }
+  .nav-dot { position: absolute; top: -2px; right: -6px; width: 9px; height: 9px; border-radius: 9999px; background: var(--destructive); border: 1.5px solid var(--ink); }
+  .hotspot { position: absolute; z-index: 2; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .hotspot-ring { width: 26px; height: 26px; border-radius: 9999px; border: 3px solid var(--gold); background: oklch(0.78 0.13 80 / 25%); box-shadow: 0 0 0 0 var(--gold); animation: ping-ring 1.8s infinite; }
+  .hotspot-npc .hotspot-ring { border-color: var(--destructive); background: oklch(0.58 0.22 25 / 30%); }
+  .hotspot-label { background: var(--ink); color: var(--gold); border: 2px solid var(--gold); font-family: var(--font-display); font-size: 11px; padding: 1px 6px; white-space: nowrap; box-shadow: 2px 2px 0 var(--ink); }
+  .hotspot-npc .hotspot-label { color: var(--paper); border-color: var(--destructive); }
+  .shake { animation: shake .35s; }
+  .pow { position: absolute; right: -6px; top: -14px; font-family: var(--font-display); font-size: 22px; color: var(--ink); background: var(--gold); padding: 0 6px; border: 2px solid var(--ink); transform: rotate(-10deg); animation: burst .3s ease-out; z-index: 3; }
+}
+@keyframes ping-ring { 0% { box-shadow: 0 0 0 0 oklch(0.78 0.13 80 / 70%); } 100% { box-shadow: 0 0 0 14px oklch(0.78 0.13 80 / 0%); } }
+@keyframes shake { 0%,100% { transform: none; } 20% { transform: translate(-5px, 2px) rotate(-2deg); } 40% { transform: translate(5px,-2px) rotate(2deg); } 60% { transform: translate(-3px,1px); } 80% { transform: translate(3px,0); } }
