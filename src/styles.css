@@ -235,3 +235,12 @@ body { font-family: var(--font-body); }
 }
 @keyframes ping-ring { 0% { box-shadow: 0 0 0 0 oklch(0.78 0.13 80 / 70%); } 100% { box-shadow: 0 0 0 14px oklch(0.78 0.13 80 / 0%); } }
 @keyframes shake { 0%,100% { transform: none; } 20% { transform: translate(-5px, 2px) rotate(-2deg); } 40% { transform: translate(5px,-2px) rotate(2deg); } 60% { transform: translate(-3px,1px); } 80% { transform: translate(3px,0); } }
+@layer components {
+  .dmg-num { position: absolute; left: 50%; top: 30%; font-family: var(--font-display); font-size: 28px; color: var(--destructive); -webkit-text-stroke: 1.5px var(--ink); animation: float-up .8s ease-out forwards; pointer-events: none; z-index: 4; }
+  .lunge-r { animation: lunge-r .35s; }
+  .lunge-l { animation: lunge-l .35s; }
+  .target-pick { outline: 2px dashed var(--destructive); outline-offset: 2px; }
+}
+@keyframes float-up { from { transform: translate(-50%, 0); opacity: 1; } to { transform: translate(-50%, -34px); opacity: 0; } }
+@keyframes lunge-r { 50% { transform: translateX(16px) scale(1.04); } }
+@keyframes lunge-l { 50% { transform: translateX(-16px) scale(1.04); } }
